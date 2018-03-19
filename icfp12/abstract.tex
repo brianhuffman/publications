@@ -1,0 +1,293 @@
+\documentclass{sigplanconf}
+\usepackage{url}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{stmaryrd}
+\usepackage{mathpartir}
+\usepackage{comment}
+
+% Font stuff suggested by Jasmin:
+\usepackage{mathptmx}
+\DeclareSymbolFont{letters}{OML}{txmi}{m}{it}
+% To avoid using Chancery font for calligraphic letters:
+\DeclareMathAlphabet{\mathcal}{OMS}{cmsy}{m}{n}
+
+
+% additional haskell infix operators
+\newcommand{\hsapp}{\mathbin{+\mkern-7mu+}}
+%\newcommand{\hsbind}{\mathbin{>\mkern-7mu>\mkern-7mu=}}
+%mathptmx package needs less negative kerning
+\newcommand{\hsbind}{\mathbin{>\mkern-6mu>\mkern-6.5mu=}}
+\newcommand{\To}{\mathbin{\Rightarrow}}
+\newcommand{\Nil}{\ensuremath{[\,]}}
+%\newcommand{\U}{\ensuremath{{\mskip1mu\mathcal{U}}}}
+\newcommand{\U}{\ensuremath{\mathcal{U}}}
+\newcommand{\D}{\ensuremath{\mathcal{D}}}
+\newcommand{\below}{\sqsubseteq}
+%\newcommand{\univ}[1]{\ensuremath{\widetilde{#1}}}
+\newcommand{\univ}[1]{\ensuremath{\underline{#1}}}
+%\newcommand{\univ}[1]{\ensuremath{\langle#1\rangle}}
+%\newcommand{\univ}[1]{\ensuremath{{#1^*}}}
+\newcommand{\REP}[1]{\ensuremath{\llbracket#1\rrbracket}}
+\newcommand{\symlbrace}{\mathopen{\lbrace\mkern-4.5mu\mid}}
+\newcommand{\symrbrace}{\mathclose{\mid\mkern-4.5mu\rbrace}}
+\newcommand{\TC}[1]{\ensuremath{\symlbrace#1\symrbrace}}
+\newcommand{\hsone}{\mathbf{1}}
+\newcommand{\hair}{\mskip1mu}
+%\newcommand{\mempty}{\emptyset}
+\newcommand{\mempty}{\varnothing}
+\newcommand{\mappend}{\mathrel{\bullet}}
+
+% Formatting for keywords
+\newcommand{\kwd}[1]{\mathbf{#1}}
+
+% Formatting for constants
+\newcommand{\hsc}[1]{\ensuremath{\mathit{#1}}}
+
+% Commonly-occurring constants
+\newcommand{\hsid}{\hsc{id}}
+\newcommand{\hsemb}{\hsc{emb}}
+\newcommand{\hsprj}{\hsc{proj}}
+\newcommand{\hsproj}{\hsc{proj}}
+\newcommand{\hsRep}{\hsc{Rep}}
+\newcommand{\hscoerce}{\hsc{coerce}}
+%\newcommand{\fmap}{\hsc{fmap}}
+\newcommand{\fmap}{\,\hsc{fmap}} %mathptmx
+\newcommand{\fmapU}{\univ{\fmap}}
+\newcommand{\returnU}{\univ{\hsc{return}}}
+\newcommand{\hsbindU}{\mathbin{\univ{\hsbind}}}
+\newcommand{\hsappU}{\mathbin{\univ{\hsapp}}}
+\newcommand{\runET}{\hsc{runET}}
+
+% HOLCF map combinators
+\newcommand{\mapLift}{\hsc{map_\bot}}
+\newcommand{\mapSum}{\hsc{map_\oplus}}
+\newcommand{\mapProd}{\hsc{map_\otimes}}
+\newcommand{\mapFun}{\hsc{map_\to}}
+
+% Ep-pairs to the universal domain
+\newcommand{\embedding}{\hsc{in}}
+\newcommand{\projection}{\hsc{out}}
+
+\newcommand{\INV}{\text{\textsc{Inv}}}
+
+% Type variables
+\newcommand{\tA}{\alpha}
+\newcommand{\tB}{\beta}
+\newcommand{\tC}{\gamma}
+\newcommand{\tD}{\delta}
+\newcommand{\tE}{\varepsilon}
+\newcommand{\tT}{\tau}
+\newcommand{\tW}{\omega}
+
+\newcommand{\isodefl}{\Vdash}
+\newcommand{\defeq}{\stackrel{\mathrm{def}}{=}}
+\newcommand{\eppair}{\stackrel{ep}{\to}}
+
+\newcommand{\justification}[1]{\{\text{#1}\}}
+
+% Set up theorem environments (amsthm package)
+\newtheorem{theorem}{Theorem}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\conferenceinfo{ICFP'12,} {September 9--15, 2012, Copenhagen, Denmark.}
+\copyrightyear{2012}
+\copyrightdata{978-1-4503-1054-3/12/09}
+\authorpermission
+
+%\titlebanner{DRAFT --- Do not distribute}
+
+\title{Formal Verification of Monad Transformers (Abstract)}
+
+\authorinfo{Brian Huffman}{Institut f\"ur Informatik, Technische Universit\"at M\"unchen}{huffman@in.tum.de}
+
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+We present techniques for reasoning about constructor classes that (like the monad class) fix polymorphic operations and assert polymorphic axioms. We do not require a logic with first-class type constructors, first-class polymorphism, or type quantification; instead, we rely on a domain-theoretic model of the type system in a universal domain to provide these features.
+These ideas are implemented in the Tycon library for the Isabelle theorem prover, which builds on the HOLCF library of domain theory. The Tycon library provides various axiomatic type constructor classes, including functors and monads. It also provides automation for instantiating those classes, and for defining further subclasses.
+We use the Tycon library to formalize three Haskell monad transformers: the error transformer, the writer transformer, and the resumption transformer. The error and writer transformers do not universally preserve the monad laws; however, we establish datatype invariants for each, showing that they are valid monads when viewed as abstract datatypes.
+\end{abstract}
+
+\category{F.3.1}{Logics and Meanings of Programs}{Specifying and Verifying and Reasoning about Programs -- mechanical verification.}
+
+\keywords{denotational semantics, monads, polymorphism, theorem proving, type classes}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+
+%As a pure functional language, Haskell promises to work well for equational reasoning and proofs. Having programs and libraries that satisfy equational laws is important, because it lets programmers think about the correctness of their code in a modular and composable way.
+
+%Type classes are a valuable abstraction mechanism for writing reusable code in Haskell. Many Haskell type classes also have laws associated with them. Haskell programs that use these type classes often rely on the assumption that the laws hold. For example, a library might implement a datatype of balanced search trees, with elements of type $\tA$. To permit comparisons between elements, the search tree operations use the class constraint $\hsc{Ord}\:\tA$, which provides the comparison operator $(\le)::\tA\to\tA\to\hsc{Bool}$. But just having an operation of the right type is not enough: For the operations to work correctly, the library requires $(\le)$ to satisfy some additional properties, e.g. that $(\le)$ is a \emph{total} order.
+
+Much Haskell code is written with equational properties in mind: Programs, libraries, and class instances may be expected to satisfy some laws, but unfortunately, there is no formal connection between programs and properties in Haskell.
+%Haskell compilers are not able to check that properties hold.
+One way to get around this limitation is to verify our Haskell programs in an interactive proof assistant, or theorem prover.
+
+%\paragraph{Isabelle/HOL.}
+
+Isabelle/HOL (or simply ``Isabelle'') is a generic interactive theorem prover, with tools and automation for reasoning about inductive datatypes and terminating functions in higher-order logic \cite{isabelle-tutorial}. Isabelle has an ML-like type system extended with axiomatic type classes, where users must supply proofs of class axioms in order to establish a class instance.
+
+%\paragraph{Isabelle/HOLCF.}
+
+HOLCF is a library of domain theory for Isabelle/HOL, which supports denotational reasoning about programs written in pure functional languages \cite{holcf99,holcf11}.
+HOLCF provides tools for defining and working with (possibly lazy) recursive datatypes, general recursive functions, partial and infinite values, and least fixed-points.
+%These features make Isabelle/HOLCF a useful system for reasoning about a significant subset of Haskell programs.
+
+%\paragraph{Type constructor classes.}
+
+In addition to ordinary type classes, Haskell also supports type constructor classes like \hsc{Functor} and \hsc{Monad}, which classify type constructors of kind $*\to*$.
+The operations in constructor classes are often polymorphic: For example, $\fmap :: (\hsc{Functor}\:\tT) \To (\tA \to \tB) \to \tT\:\tA \to \tT\:\tB$ is polymorphic over $\tA$ and $\tB$. The functor laws (identity and composition) are also polymorphic, and we expect the laws to hold at all type instances.
+Formal reasoning with constructor classes thus requires support for both polymorphism and type quantification, neither of which is natively supported by Isabelle. Fortunately, we can model these features in HOLCF with the help of a universal domain type.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Deflation model of types}
+\label{sec:deflation-model}
+
+HOLCF provides a universal domain type $\U$, which can represent a large class of cpos that includes all Haskell datatypes \cite{Huffman2009}. HOLCF formalizes representable domains with overloaded functions $\hsemb_\alpha :: \tA \to \U$ and $\hsproj_\alpha :: \U \to \tA$ which form an embedding-projection pair: $\hsproj_\alpha \circ \hsemb_\alpha = id_\alpha$ and $\hsemb_\alpha \circ \hsproj_\alpha \sqsubseteq \hsid_\U$.
+
+The composition $\hsproj_\alpha \circ \hsemb_\alpha$ yields a \emph{deflation}, i.e., an idempotent function below $\hsid$. HOLCF defines a type $\D$ of deflations over $\U$ as a subtype of $\U\to\hair\U$. Deflations model types: Each representable domain type in HOLCF has a representation $\REP{\tA} = \hsemb_\tA \circ \hsproj_\tA$ of type $\D$. Conversely, we can construct a representable domain from any given deflation, using its image set.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{The Tycon library}
+%\label{sec:constructor-classes}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\paragraph{Class Tycon.}
+%\label{sec:tycon}
+The Tycon library \cite{AFP2012} uses deflations to reason about new type system features.
+To model Haskell type application, we define a binary Isabelle type constructor $(-\cdot-)$ \cite{HMW2005}. The right argument must be a representable domain, which models kind $*$. The left argument must be in a new class \hsc{Tycon}, which models kind $*\to*$.
+%
+\begin{equation*}
+\kwd{class}\:\hsc{Tycon}\:\tT\:\kwd{where}\:\TC{\tT} :: \D \to \D
+\end{equation*}
+%
+The Tycon library then defines type $\tT\cdot\tA$ %in terms of its representing deflation,
+so that $\REP{\tT\cdot\tA} = \TC{\tT}\REP{\tA}$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\paragraph{Class Functor.}
+
+Haskell's \hsc{Functor} class fixes a function $\fmap :: (\hsc{Functor}\:\tT) \To (\tA \to \tB) \to (\tT\:\tA \to \tT\:\tB)$. However, we cannot use this type for a class function in Isabelle; the extra polymorphism over $\tA$ and $\tB$ is not allowed.
+Our solution is to replace the polymorphic $\fmap^\tT$ with a single, monomorphic constant $\fmapU^\tT$ representing $\fmap^\tT_{\U,\U}$. %, the ``largest'' type instance of $\fmap^\tT$.
+We then define the polymorphic $\fmap^\tT$ by coercion from $\fmapU^\tT$.
+%
+\begin{align*}
+  & \kwd{class}\:(\hsc{Tycon}\:\tT) \To \hsc{Functor}\:\tT\:\kwd{where}
+  \\[-\jot]
+  & \hspace{8pt} \fmapU^\tT :: (\U \to \U) \to (\tT\cdot\U \to \tT\cdot\U)
+  \\[\jot]
+  & \fmap :: (\hsc{Functor}\:\tT) \To (\tA \to \tB) \to \tT\cdot\tA \to \tT\cdot\tB
+  \\[-\jot]
+  & \fmap^\tT_{\tA,\,\tB} = \hscoerce\:\fmapU^\tT
+\end{align*}
+%
+To coerce between any two representable domains, we use the function $\hscoerce_{\tA,\,\tB} = \hsproj_\tB \circ \hsemb_\tA$. Instances of \hsc{emb} and \hsc{proj} are defined so that $\hscoerce$ on datatypes coincides with mapping $\hscoerce$ over the elements. Similarly, coercion between function types satisfies $\hscoerce\:f = \hscoerce \circ f \circ \hscoerce$.
+
+The Isabelle formalization of class \hsc{Functor} also includes class axioms about $\fmapU^\tT$, which are sufficient to derive the polymorphic functor laws $\fmap\:\hsid = \hsid$ and $\fmap\:(f \circ g) = \fmap\:f \circ \fmap\:g$. (Due to space constraints, we omit the details here.)
+
+To facilitate \hsc{Functor} class instances, the Tycon library provides a new user-level type definition command. Its capabilities are similar to the HOLCF Domain package \cite{holcf11}, and it reuses much of the same code. The difference is that it produces \hsc{Tycon} instances instead of ordinary representable domains. It also defines $\fmapU$ and proves the identity law. (Users must prove composition.)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\paragraph{Subclasses of Functor.}
+%\label{sec:functorplus}
+
+Users can formalize subclasses of \hsc{Functor} by a standard process involving \emph{naturality laws}. As an example, we formalize a class $\hsc{FunctorPlus}\:\tT$ with an associative operation $(\hsapp)::\tT\:\tA\to\tT\:\tA\to\tT\:\tA$.
+%
+\begin{align*}
+  & \kwd{class}\:(\hsc{Functor}\:\tT) \To \hsc{FunctorPlus}\:\tT\:\kwd{where}
+  \\[-\jot]
+  & \hspace{8pt} (\hsappU^\tT) :: \tT\cdot\U \to \tT\cdot\U \to \tT\cdot\U \\
+  & \hspace{8pt}
+  \begin{alignedat}{2}
+    & \fmapU^\tT\,f\:(x \hsappU^\tT y) &&= (\fmapU^\tT\,f\:x) \hsappU^\tT (\fmapU^\tT\,f\:y)
+    \\[-\jot]
+    & (x \hsappU^\tT y) \hsappU^\tT z &&= x \hsappU^\tT (y \hsappU^\tT z)
+  \end{alignedat}
+%  \\[\medskipamount]
+%  & (\hsapp) :: (\hsc{FunctorPlus}\:\tT) \To \tT\cdot\tA \to \tT\cdot\tA \to \tT\cdot\tA
+%  \\[-\jot]
+%  & (\hsapp^\tT_\tA) = \hscoerce\:(\hsappU^\tT)
+\end{align*}
+%
+As above, we define the polymorphic $(\hsapp)$ by coercion from a monomorphic class function. The class axioms include a monomorphic associativity law, as well as a naturality law whose form is derived from the polymorphic type of $(\hsapp)$. The naturality law holds in Haskell as a consequence of parametricity \cite{Wadler1989}.
+
+We derive polymorphic versions of the class axioms by rewriting with a set of rules about $\hscoerce$. Combinations of coercions between $\tT\cdot\U$ and $\tT\cdot\tA$ yield new occurrences of $\fmapU^\tT$; the naturality law then helps to complete the transfer proofs.
+
+\hsc{Monad} and other constructor classes are defined similarly.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{comment}
+\section{Instantiating type constructor classes}
+\label{sec:instantiation}
+
+To facilitate the definition of \hsc{Functor} class instances, the Tycon library provides a new user-level type definition command. It provides the same set of features as the HOLCF Domain package, and is implemented using much of the same code. The difference is that the type being defined can be expressed using the type application operator, so that it generates a \hsc{Tycon} instance. For example:
+%
+\begin{equation*}
+\kwd{data}\:\hsc{List}\cdot\tA = \hsc{Nil} \mid \hsc{Cons}\:\tA\:(\hsc{List}\cdot\tA)
+\end{equation*}
+
+The command automatically defines $\fmapU$ and proves the functor identity law, yielding a \hsc{Prefunctor} instance---a version of class \hsc{Functor} without the composition law. It is not always possible to automatically prove the composition law, because it can fail for some strict datatypes; thus we leave it to the user to prove it separately. Further subclass instances like \hsc{Monad} require no special tools or techniques.
+\end{comment}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Verifying monad transformers}
+\label{sec:monad-transformers}
+
+The Tycon library can easily formalize simple \hsc{Monad} instances like \hsc{List}. It can also define \hsc{Tycon} instances with additional type parameters, which may be type constructors themselves. For example, we have formalized the resumption monad transformer: %\cite{Papaspyrou2001} in our library:
+%
+\begin{equation*}
+\kwd{data}\;\hsc{ResT}\:\tT\cdot\tA = \hsc{Done}\;\tA \mid \hsc{More}\;(\tT\cdot(\hsc{ResT}\:\tT\cdot\tA))
+\end{equation*}
+%
+(Note that although we call it a monad transformer, the class instance \hsc{Monad} $(\hsc{ResT}\:\tT)$ only requires $\tT$ to be a functor.)
+
+We have also formalized the error monad transformer \cite{Jones1995}, which composes the inner monad with an ordinary error monad.
+%
+\begin{align*}
+& \kwd{data}\:\hsc{Error}\:\tE\cdot\tA = \hsc{Err}\;\tE \mid \hsc{Ok}\;\tA \\
+& \kwd{newtype}\:\hsc{ErrorT}(\tE,\tT)\cdot\tA = \hsc{ErrorT}\:\{\,\runET :: \tT\cdot(\hsc{Error}\:\tE\cdot\tA)\,\}
+\end{align*}
+
+Unfortunately, proving an instance of $\hsc{Monad}\,(\hsc{ErrorT}(\tE,\tT))$ is not possible, because not all of the class axioms hold. We define the monad operations as separate constants instead.
+%
+\begin{align*}
+& \hsc{unit}\;a = \hsc{ErrorT}\,(\hsc{return}^\tT\,(\hsc{Ok}\;a)) \\
+& \hsc{bind}\;m\;k = \hsc{ErrorT}\,(\runET\:m \hsbind^\tT \lambda\,{x}. \\[-\jot]
+& \hspace{16pt} \mathrm{case}\;x\;\mathrm{of}\;\hsc{Err}\;e \to \hsc{return}^\tT\,(\hsc{Err}\;e);\; \hsc{Ok}\;a \to \runET\:(k\;a))
+\end{align*}
+
+We can verify that the left unit law $\hsc{bind}\:(\hsc{unit}\;a)\;k = k\;a$ holds, and that \hsc{bind} satisfies the associativity law. On the other hand, the right unit monad law $\hsc{bind}\;m\;\hsc{unit} = m$ is not satisfied in general. Unless the inner monad $\tT$ has a strict \hsc{return} function, $m = \hsc{ErrorT}\:(\hsc{return}\:\bot)$ is a counterexample to the right unit law.
+
+However, it turns out that it is impossible to construct the value $\hsc{ErrorT}\:(\hsc{return}\:\bot)$ using only the standard \hsc{ErrorT} operations \hsc{unit}, \hsc{bind}, \hsc{throw}, \hsc{catch}, and \hsc{lift}. Furthermore, we can show that for all constructible values, the monad laws do always hold. In fact, the right unit law $\hsc{bind}\;m\;\hsc{unit} = m$ is an invariant which is preserved by all of the \hsc{ErrorT} operations. So when viewed as an abstract datatype, we could still consider \hsc{ErrorT} to be a valid monad.
+
+A similar situation occurs when formalizing the standard Haskell writer monad transformer \cite{Jones1995}. The monad instance fails because neither the left nor the right unit laws are preserved in general. But as before, the right unit law is an invariant which is preserved by all operations; the invariant also implies the left unit law. Thus the writer monad transformer is a valid monad when viewed as an abstract datatype.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related work}
+\label{sec:conclusion}
+
+%The Tycon library for Isabelle/HOLCF is now available \cite{AFP2012}. It lets users define, reason about, and instantiate constructor classes with little effort. It models polymorphism using coercion and a universal domain, which allows it to work in ordinary higher-order logic.
+
+A different domain-theoretic model of polymorphism is presented by Amadio and Curien \cite{amadio+curien}. Here, polymorphic functions are modeled as functions from types (i.e. deflations) to values. However, this model allows non-parametric polymorphic functions that depend non-trivially on the type argument.
+
+Sozeau and Oury~\cite{Sozeau2008} recently developed a type class mechanism for the Coq theorem prover. Coq has a powerful dependent type system that allows reasoning about type constructors, first-class polymorphic values and type quantification. They define a monad class with laws. However, Coq's logic of total functions does not permit all the recursive definitions possible in HOLCF.
+
+Our earlier formalization of axiomatic constructor classes \cite{HMW2005} could express many of the same type definitions as the current work, although the classes were defined differently. Instead of naturality laws, it used a deflation membership relation $x ::: d$ to encode polymorphic types.
+Some automation for the \hsc{Functor} and \hsc{Monad} classes was present, but transfer proofs for polymorphic laws were tedious, making subclass definitions impractical. Overall, the new Tycon library provides much better automation for users.
+
+For the full version of this paper, see arXiv:1207.3208 [cs.LO].
+
+%\acks
+% Thanks to John Matthews for many discussions about HOLCF which helped to develop the ideas in this paper. Thanks also to Jasmin Blanchette for reading an early draft and providing helpful comments.
+
+\bibliographystyle{plain}
+\bibliography{root}
+
+\end{document}
