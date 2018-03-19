@@ -1,0 +1,24 @@
+syntax: glob
+
+*~
+work/*
+thesis.pdf
+*.aux
+*.log
+*.make
+thesis-def.idx
+thesis-def.ilg
+thesis-def.ind
+thesis-plan.tex
+thesis-thm.idx
+thesis-thm.ilg
+thesis-thm.ind
+thesis.bbl
+thesis.blg
+thesis.d
+thesis.fls
+thesis.idx
+thesis.lof
+thesis.lot
+thesis.out
+thesis.toc

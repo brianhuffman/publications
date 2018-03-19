@@ -1,0 +1,1243 @@
+\chapter{Case Study and Conclusion: Verifying Monads}
+\label{ch:case-domain}
+
+\section{Introduction}
+
+The primary claim of this thesis is that \HOLCF{11} offers a superior environment for program verification---specifically, we claim that \HOLCF{11} provides an unprecented combination of \emph{expressiveness}, \emph{automation}, and \emph{confidence}.
+Expressiveness means that users can accurately and concisely specify the datatypes, functions, and properties that they want to reason about. The new and improved definition packages in \HOLCF{11} make it easy to translate a wider variety of recursive datatype and function definitions than ever before. Automation means that users can avoid expending effort on trivial proof details, and focus on the interesting parts of more difficult proofs. Theorems that are straightforward to prove on paper (and also some that are not so easy on paper) have almost completely automatic proofs in \HOLCF{11}. The new proof automation also helps users to prove large, complex theorems with minimal effort. Confidence means that there is a strong argument for believing in the correctness of the system---\HOLCF{11} provides confidence by adhering to a purely definitional approach, and avoiding new axioms.
+
+The goal of this chapter is to provide evidence for these claims. The level of confidence has already been established in the previous chapters, which describe the purely definitional implementation of \HOLCF{11}. To measure the expressiveness and automation available in \HOLCF{11}, we consider case studies where we prove properties about specific functional programs. Finally, to support the claim that the combination of these qualities in \HOLCF{11} is \emph{unprecedented}, we compare \HOLCF{11} with some earlier approaches to program verification, evaluating them along the axes of expressiveness, automation, and confidence.
+
+For the case studies in this chapter, we examine some monad types of the kind often used in Haskell programming. Recall that monads are typically used to implement computations with side-effects, such as exceptions or mutable state---different monad types provide different kinds of side-effects. Every monad is equipped with a \emph{return} operation, which returns a value without side-effects; and a \emph{bind} operation, which sequences computations by feeding the result of one computation into the next. These operations are expected to satisfy a set of monad laws. Also, individual monads may have other operations that are expected to satisfy additional laws. For example, a mutable-state monad would have \emph{read} and \emph{write} operations that should satisfy some simple properties.
+
+The example monads used in this chapter range from simple to complex: First we have the basic type of lazy lists, which is ubiquitous in Haskell programming. Later on we consider a much more complex monad with multiple kinds of side-effects, that is useful for modeling concurrency. Its definition is built up from simpler monads in stages, using \emph{monad transformers} \cite{Moggi89, LHJ95}. The definitions and proofs for lazy lists serve primarily to show how well \HOLCF{11} handles easy verification tasks, while the concurrency monad is intended to test the full extent of \HOLCF{11}'s capabilities.
+
+In addition to verifying the monad laws for each type, we also define and verify some other type-specific operations. For lazy lists, we formalize the Haskell functions \hs{repeat}, which generates infinite lists; and \hs{zipWith}, which applies a function pointwise to two lists. For the concurrency monad, we formalize an operation that nondeterministically interleaves two computations. Each of these operations satisfies a set of laws that comes from the theory of \emph{applicative functors} \cite{McBride08}.
+
+\paragraph{Contributions.} The case studies here primarily serve to demonstrate the tools described in the earlier chapters, but they introduce some new technical contributions as well. Some new proof techniques have been developed to help automate some of the proofs presented in this chapter:
+%
+\begin{itemize*}
+\item Parallel fixed point induction using depth parameters (\S\ref{sec:case-coinductive})
+\item Principle of \emph{map-induction} for indirect-recursive datatypes (\S\ref{sec:case-induct-R})
+\end{itemize*}
+
+\paragraph{Overview.} The remainder of this chapter is organized as follows: Section~\ref{sec:case-lazy-list} covers the lazy list monad case study. After defining the datatype and list operations (\S\ref{sec:case-llist-definition}), we verify the monad laws (\S\ref{sec:case-llist-monad}). Next we consider the applicative functor instance with \hs{repeat} and \hs{zipWith} (\S\ref{sec:case-applicative}) and their correctness proofs (\S\ref{sec:case-verify-applicative}). One law in particular requires more advanced coinductive proof techniques; we evaluate some standard methods, and compare them with a new technique using induction over depth parameters (\S\ref{sec:case-coinductive}).
+
+Section~\ref{sec:case-concurrency-monad} discusses the development of the concurrency monad. The concurrency monad is built up using a sequence of standard monads and monad transformers (\S\ref{sec:case-composing-monads}--\ref{sec:case-resumption-transformer}), ultimately being defined by the \textsc{Domain} package (\S\ref{sec:case-define-R}). After developing the \emph{map-induction} principle for reasoning about the concurrency monad (\S\ref{sec:case-induct-R}), we verify the monad operations (\S\ref{sec:case-verify-R}) and the nondeterministic interleaving operator (\S\ref{sec:case-zipR}).
+
+Section~\ref{sec:case-related} contains a survey of related work, where we compare the attributes of \HOLCF{11} with those of various earlier systems and approaches to program verification. Finally, Sec.~\ref{sec:case-conclusion} gives a summary and some closing remarks.
+
+\section{The lazy list monad}
+\label{sec:case-lazy-list}
+
+In this section, we formalize a lazy list type in HOLCF, which models the standard Haskell list type. We also define the functor and monad operations on the lazy list type, corresponding to the standard Haskell definitions of \hs{fmap}, \hs{return} and \hs{(>{}>=)} for lists, and prove the standard laws about them. The definitions and laws for the functor and monad classes are shown in Figs.~\ref{fig:case-functor-laws} and \ref{fig:case-monad-laws}; the class instances for lists are given in Fig.~\ref{fig:case-list-instances}.
+
+\begin{figure}
+\begin{center}
+\begin{minipage}{0.90\textwidth}
+\begin{hscode}
+class Functor f where
+  fmap :: (a -> b) -> f a -> f b
+\end{hscode}
+\begin{hscode}
+        fmap id v = v               -- Identity
+fmap g (fmap h v) = fmap (g . h) v  -- Composition
+\end{hscode}
+\end{minipage}
+\end{center}
+\caption{Haskell class \texttt{Functor}, with functor laws}
+\label{fig:case-functor-laws}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\begin{minipage}{0.90\textwidth}
+\begin{hscode}
+class Monad m where
+  return :: a -> m a
+  (>>=) :: m a -> (a -> m b) -> m b
+\end{hscode}
+\begin{hscode}
+ (return x >>= g) = g x                        -- Left unit
+   (v >>= return) = v                          -- Right unit
+((v >>= g) >>= h) = (v >>= (\x -> g x >>= h))  -- Associativity
+\end{hscode}
+\end{minipage}
+\end{center}
+\caption{Haskell class \texttt{Monad}, with monad laws}
+\label{fig:case-monad-laws}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\begin{minipage}{0.80\textwidth}
+\begin{hscode}
+data [a] = [] | a : [a]
+\end{hscode}
+\begin{hscode}
+instance Functor [] where
+  fmap g [] = []
+  fmap g (x : xs) = g x : fmap g xs
+\end{hscode}
+\begin{hscode}
+(++) :: [a] -> [a] -> [a]
+[]       ++ ys = ys
+(x : xs) ++ ys = x : (xs ++ ys)
+\end{hscode}
+\begin{hscode}
+instance Monad [] where
+  return x = [x]
+  []       >>= k = []
+  (x : xs) >>= k = k x ++ (xs >>= k)
+\end{hscode}
+\end{minipage}
+\end{center}
+\caption{Haskell \texttt{Functor} and \texttt{Monad} instances for lazy lists}
+\label{fig:case-list-instances}
+\end{figure}
+
+\HOLCF{11} aims to make easy proofs automatic, and hard proofs possible. These properties of Haskell list operations are examples of easy proofs---the goal of this section is to illustrate how simple it is to formalize the definitions in HOLCF, and how easy and automated the proofs can be.
+
+\subsection{Datatype and function definitions}
+\label{sec:case-llist-definition}
+
+The first step in formalizing the Haskell list monad in HOLCF is to define the type using the \textsc{Domain} package. We use the name \isa{llist} for lazy lists in HOLCF, to avoid a clash with the existing Isabelle/HOL \isa{list} datatype.
+%
+\indexdefx{domain 'a llist}
+\begin{isacode}
+domain 'a llist = LNil | LCons (lazy "'a") (lazy "'a llist")
+\end{isacode}
+%
+Among the many theorems generated by this call to the \textsc{Domain} package, one of the most important is \isa{llist.induct}: It is used in every proof that involves induction over lazy lists.
+%
+\indexthmx{llist.induct}
+\begin{isacode}
+theorem llist.induct:
+  "\<lbrakk>adm P; P \<bottom>; P LNil; \<And>x xs. P xs \<Longrightarrow> P (LCons\<cdot>x\<cdot>xs)\<rbrakk> \<Longrightarrow> P ys"
+\end{isacode}
+
+We formalize the Haskell list functions \hs{fmap}, \hs{return}, \hs{(++)}, and \hs{(>{}>=)} in HOLCF as \isa{mapL}, \isa{unitL}, \isa{appendL}, and \isa{bindL}, respectively (see Fig.~\ref{fig:case-list-holcf}). Each of them is defined using \textsc{Fixrec}, except for \isa{unitL}; because \isa{unitL} does not need pattern matching or recursion, a simple \isa{definition} suffices. In addition to the defining equations, we also generate strictness rules for each function. Each strictness rule is proved by a single application of the \isa{fixrec_simp} method (introduced in Chapter~\ref{ch:fixrec}).
+
+\begin{figure}
+\indexdefx{mapL}
+\begin{isacode}
+fixrec mapL :: "('a \<rightarrow> 'b) \<rightarrow> 'a llist \<rightarrow> 'b llist"
+  where "mapL\<cdot>f\<cdot>LNil = LNil"
+  | "mapL\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>xs) = LCons\<cdot>(f\<cdot>x)\<cdot>(mapL\<cdot>f\<cdot>xs)"
+\end{isacode}
+\unmedskip
+\indexdefx{unitL}
+\begin{isacode}
+definition unitL :: "'a \<rightarrow> 'a llist"
+  where "unitL = (\<Lambda> x. LCons\<cdot>x\<cdot>LNil)"
+\end{isacode}
+\unmedskip
+\indexdefx{appendL}
+\begin{isacode}
+fixrec appendL :: "'a llist \<rightarrow> 'a llist \<rightarrow> 'a llist"
+  where "appendL\<cdot>LNil\<cdot>ys = ys"
+  | "appendL\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>ys = LCons\<cdot>x\<cdot>(appendL\<cdot>xs\<cdot>ys)"
+\end{isacode}
+\unmedskip
+\indexdefx{bindL}
+\begin{isacode}
+fixrec bindL :: "'a llist \<rightarrow> ('a \<rightarrow> 'b llist) \<rightarrow> 'b llist"
+  where "bindL\<cdot>LNil\<cdot>f = LNil"
+  | "bindL\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>f = appendL\<cdot>(f\<cdot>x)\<cdot>(bindL\<cdot>xs\<cdot>f)"
+\end{isacode}
+\unmedskip
+\indexthmx{mapL_strict}
+\begin{isacode}
+lemma mapL_strict [simp]: "mapL\<cdot>f\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+\end{isacode}
+\unmedskip
+\indexthmx{appendL_strict}
+\begin{isacode}
+lemma appendL_strict [simp]: "appendL\<cdot>\<bottom>\<cdot>ys = \<bottom>"
+  by fixrec_simp
+\end{isacode}
+\unmedskip
+\indexthmx{bindL_strict}
+\begin{isacode}
+lemma bindL_strict [simp]: "bindL\<cdot>\<bottom>\<cdot>f = \<bottom>"
+  by fixrec_simp
+\end{isacode}
+\caption{HOLCF formalization of functor and monad operations for lazy lists}
+\label{fig:case-list-holcf}
+\end{figure}
+
+\subsection{Verifying the functor and monad laws}
+\label{sec:case-llist-monad}
+
+With all the operations defined and the rewrite rules added to the simplifier, we can proceed to prove the functor and monad laws. The proofs of both functor laws for lazy lists are completely automatic: Just apply induction followed by simplification.
+%
+\indexthmx{mapL_ID}
+\begin{isacode}
+lemma mapL_ID: "mapL\<cdot>ID\<cdot>xs = xs"
+  by (induct xs, simp_all)
+\end{isacode}
+\unmedskip
+\indexthmx{mapL_mapL}
+\begin{isacode}
+lemma mapL_mapL: "mapL\<cdot>f\<cdot>(mapL\<cdot>g\<cdot>xs) = mapL\<cdot>(f oo g)\<cdot>xs"
+  by (induct xs, simp_all)
+\end{isacode}
+%
+The right unit law for the lazy list monad has a similar automatic proof, as long as we tell the simplifier to unfold the definition of \isa{unitL}.
+
+\indexthmx{bindL_unitL_right}
+\begin{isacode}
+lemma bindL_unitL_right: "bindL\<cdot>xs\<cdot>unitL = xs"
+  by (induct xs, simp_all add: unitL_def)
+\end{isacode}
+
+The proofs of the other two monad laws are slightly more difficult. While they still have a high level of automation, each proof requires one or more lemmas. We will consider the left unit law first.
+
+The left unit law for the lazy list monad requires that \isa{bindL\<cdot>(unitL\<cdot>x)\<cdot>g = g\<cdot>x}. If we unfold the definition of \isa{unitL} and simplify, we are left with the subgoal \isa{appendL\<cdot>(g\<cdot>x)\<cdot>LNil = g\<cdot>x}. To proceed, we must back up and prove a lemma saying that appending \isa{LNil} on the right leaves a list unchanged. With the help of lemma \isa{appendL_LNil_right}, the left unit law can then be proved automatically.
+ %
+\indexthmx{appendL_LNil_right}
+\begin{isacode}
+lemma appendL_LNil_right: "appendL\<cdot>xs\<cdot>LNil = xs"
+  by (induct xs, simp_all)
+\end{isacode}
+\unmedskip
+\indexthmx{bindL_unitL}
+\begin{isacode}
+lemma bindL_unitL: "bindL\<cdot>(unitL\<cdot>x)\<cdot>g = g\<cdot>x"
+  by (simp add: unitL_def appendL_LNil_right)
+\end{isacode}
+
+Finally we consider the associativity law, which asserts that \isa{bindL\<cdot>(bindL\<cdot>xs\<cdot>g)\<cdot>h} \isa{=} \isa{bindL\<cdot>xs\<cdot>(\<Lambda> x. bindL\<cdot>(g\<cdot>x)\<cdot>h)}. If we perform induction on \isa{xs}, the simplifier can automatically solve all subgoals but one: In the \isa{LCons} case, the left hand side \isa{bindL\<cdot>(bindL\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>g)\<cdot>h} reduces to 
+\isa{bindL\<cdot>(appendL\<cdot>(g\<cdot>x)\<cdot>(bindL\<cdot>xs\<cdot>g))\<cdot>h}, but then we get stuck: We need to prove a lemma to show that \isa{bindL} distributes over \isa{appendL}.
+
+We can try to prove \isa{bindL\<cdot>(appendL\<cdot>xs\<cdot>ys)\<cdot>g = appendL\<cdot>(bindL\<cdot>xs\<cdot>g)\<cdot>(bindL\<cdot>ys\<cdot>g)} as a lemma, by induction on \isa{xs}. As before, simplification discharges everything but the \isa{LCons\<cdot>x\<cdot>xs} case: After simplifying and rewriting with the inductive hypothesis, the left-hand side reduces to \isa{appendL\<cdot>(g\<cdot>x)\<cdot>(appendL\<cdot>(bindL\<cdot>xs\<cdot>g)\<cdot>(bindL\<cdot>ys\<cdot>g))}. The right-hand side is similar, but has the appends grouped the other way: \isa{appendL\<cdot>} \isa{(appendL\<cdot>(g\<cdot>x)\<cdot>(bindL\<cdot>xs\<cdot>g))\<cdot>(bindL\<cdot>ys\<cdot>g)}. This suggests yet another lemma: We must prove that \isa{appendL} is associative.
+
+At last, the associativity of \isa{appendL} can be proved directly by induction on \isa{xs}, without needing any more lemmas. After \isa{appendL_appendL}, we can now give fully automatic proofs for \isa{bindL_appendL} and \isa{bindL_bindL}, where each theorem uses the previous one as a rewrite rule.
+%
+\indexthmx{appendL_appendL}
+\begin{isacode}
+lemma appendL_appendL:
+    "appendL\<cdot>(appendL\<cdot>xs\<cdot>ys)\<cdot>zs = appendL\<cdot>xs\<cdot>(appendL\<cdot>ys\<cdot>zs)"
+  by (induct xs, simp_all)
+\end{isacode}
+\unmedskip
+\indexthmx{bindL_appendL}
+\begin{isacode}
+lemma bindL_appendL:
+    "bindL\<cdot>(appendL\<cdot>xs\<cdot>ys)\<cdot>g = appendL\<cdot>(bindL\<cdot>xs\<cdot>g)\<cdot>(bindL\<cdot>ys\<cdot>g)"
+  by (induct xs, simp_all add: appendL_appendL)
+\end{isacode}
+\unmedskip
+\indexthmx{bindL_bindL}
+\begin{isacode}
+lemma bindL_bindL: "bindL\<cdot>(bindL\<cdot>xs\<cdot>g)\<cdot>h = bindL\<cdot>xs\<cdot>(\<Lambda> x. bindL\<cdot>(g\<cdot>x)\<cdot>h)"
+  by (induct xs, simp_all add: bindL_appendL)
+\end{isacode}
+
+\subsection{Applicative functors and laws for zip}
+\label{sec:case-applicative}
+
+The functor and monad operations, \hs{fmap}, \hs{return} and \hs{(>{}>=)}, are not the only functions on lazy lists with standard algebraic laws that we ought to verify. The \emph{applicative functors} are another algebraic class of which lazy lists can be made an instance. The particular instance discussed here is based on the standard Haskell functions \hs{repeat} and \hs{zipWith}; in this section we prove that these operations satisfy the appropriate \emph{applicative functor laws}.
+
+The class of applicative functors for Haskell was introduced recently by McBride and Paterson \cite{McBride08}. An applicative functor is more than a functor, but less than a monad: Applicative functors support sequencing of effects, but not binding. The class is defined in Haskell as shown in Fig.~\ref{fig:case-applicative-laws}. It fixes two functions: First, \hs{pure} lifts an ordinary value into the applicative functor type; it denotes a computation with no effects, much like \hs{return} for monads. Second, the left-associative infix operator \hs{(<*>)} takes two computations, respectively yielding a function and an argument, and applies them together, sequencing their effects. All reasonable implementations of \hs{pure} and \hs{(<*>)} are expected to satisfy the four laws listed in Fig.~\ref{fig:case-applicative-laws}.\footnote{In the composition law, \hs{(.) :: (b -> c) -> (a -> b) -> a -> c} denotes function composition.}
+
+\begin{figure}
+\begin{hscode}
+class Applicative f where
+  pure :: a -> f a
+  (<*>) :: f (a -> b) -> f a -> f b   -- left-associative
+\end{hscode}
+\begin{hscode}
+             pure id <*> v = v                      -- Identity
+pure (.) <*> u <*> v <*> w = u <*> (v <*> w)        -- Composition
+         pure g <*> pure x = pure (g x)             -- Homomorphism
+              u <*> pure y = pure (\g -> g y) <*> u -- Interchange
+\end{hscode}
+\caption{Haskell class \texttt{Applicative}, with applicative functor laws}
+\label{fig:case-applicative-laws}
+\end{figure}
+
+There is more than one way to instantiate class \hs{Applicative} for the lazy list type. One possibility, which works for any monad, is to define \hs{pure} and \hs{(<*>)} in terms of the monadic operations \hs{return} and \hs{(>{}>=)}, as shown below.
+%
+\begin{hscode}
+instance Applicative [] where
+  pure x = return x
+  fs <*> xs = fs >>= (\f -> xs >>= (\x -> return (f x)))
+\end{hscode}
+%
+With these definitions, the four applicative functor laws can be proven by rewriting with the monad laws. An applicative functor instance can be derived from any monad in the same way. In terms of demonstrating proof techniques in HOLCF, this instantiation is rather unpromising.
+
+For our purposes, a different instantiation using \hs{repeat} and \hs{zipWith} offers a more interesting verification challenge for \HOLCF{11}. The full code for the applicative functor instance is shown in Fig.~\ref{fig:case-applicative-list-instance}. In this version, sequencing is done by taking a list of functions and a list of arguments, and applying them pointwise. The ``effect'' being sequenced here is essentially the dependence of values on their positions in the list. A pure computation (with no such ``effect'') is then represented as an infinite list whose elements are all the same.
+
+\begin{figure}
+\begin{center}
+\begin{minipage}{0.90\textwidth}
+\begin{hscode}
+repeat :: a -> [a]
+repeat x = x : repeat x
+\end{hscode}
+\begin{hscode}
+zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+zipWith f (x : xs) (y : ys) = f x y : zipWith f xs ys
+zipWith f _ _ = []
+\end{hscode}
+\begin{hscode}
+instance Applicative [] where
+  pure x = repeat x
+  fs <*> xs = zipWith id fs xs
+\end{hscode}
+\end{minipage}
+\end{center}
+\caption{Zip-style applicative functor instance for lazy lists}
+\label{fig:case-applicative-list-instance}
+\end{figure}
+
+\subsection{Verifying the applicative functor laws}
+\label{sec:case-verify-applicative}
+
+As with the functor and monad laws, the first step in verifying the applicative laws is to define the operations using \textsc{Fixrec}. We define the HOLCF functions \isa{repeatL} and \isa{zipL} following the Haskell definitions of \hs{repeat} and \hs{zipWith}.
+%
+\indexdefx{repeatL}
+\begin{isacode}
+fixrec repeatL :: "'a \<rightarrow> 'a llist"
+  where [simp del]: "repeatL\<cdot>x = LCons\<cdot>x\<cdot>(repeatL\<cdot>x)"
+\end{isacode}
+\unmedskip
+\indexdefx{zipL}
+\begin{isacode}
+fixrec zipL :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<rightarrow> 'a llist \<rightarrow> 'b llist \<rightarrow> 'c llist"
+  where "zipL\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>(LCons\<cdot>y\<cdot>ys) = LCons\<cdot>(f\<cdot>x\<cdot>y)\<cdot>(zipL\<cdot>f\<cdot>xs\<cdot>ys)"
+  | (unchecked) "zipL\<cdot>f\<cdot>xs\<cdot>ys = LNil"
+\end{isacode}
+
+There are a couple of annotations on these definitions that require explanation: First, because \isa{repeatL} does not pattern match on a constructor, its defining equation would loop if used as a rewrite rule; for this reason, we declare it with \isa{[simp del]} to remove it from the simplifier. In proofs, we must apply the rule \isa{repeatL.simps} manually as needed. Second, the specification of \isa{zipL} includes a catch-all case that returns \isa{LNil}. This equation is not provable as a theorem, because it only applies when the other equation fails to match; thus we must declare it as \isa{(unchecked)}. The theorem list \isa{zipL.simps} then only includes the first equation.
+
+So far, \textsc{Fixrec} has only provided one rewrite rule about \isa{zipL}. Doing proofs about \isa{zipL} will require a few more, which we get using \isa{fixrec_simp}.
+%
+\indexthmx{zipL_extra_simps}
+\begin{isacode}
+lemma zipL_extra_simps [simp]:
+  "zipL\<cdot>f\<cdot>\<bottom>\<cdot>ys = \<bottom>"
+  "zipL\<cdot>f\<cdot>LNil\<cdot>ys = LNil"
+  "zipL\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>\<bottom> = \<bottom>"
+  "zipL\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>LNil = LNil"
+by fixrec_simp+
+\end{isacode}
+
+We define the HOLCF infix operator \isa{\<diamond>} to represent the Haskell operator \hs{(<*>)} on lazy lists. Defining it as a syntactic abbreviation means that we can reason about it using the lemmas we already have for \isa{zipL}.
+%
+\indexdefx{apL}
+\begin{isacode}
+abbreviation apL (infixl "\<diamond>" 70)
+  where "fs \<diamond> xs \<equiv> zipL\<cdot>ID\<cdot>fs\<cdot>xs"
+\end{isacode}
+
+With these definitions, we are now ready to consider the proofs of the applicative functor laws. We will start with the identity law, where we must prove that \isa{repeatL\<cdot>ID \<diamond> xs = xs}. Induction on \isa{xs} yields the following subgoals:
+%
+\begin{isacode}
+goal (4 subgoals):
+ 1. adm (\<lambda>a. repeatL\<cdot>ID \<diamond> a = a)
+ 2. repeatL\<cdot>ID \<diamond> \<bottom> = \<bottom>
+ 3. repeatL\<cdot>ID \<diamond> LNil = LNil
+ 4. \<And>a xs. repeatL\<cdot>ID \<diamond> xs = xs \<Longrightarrow> repeatL\<cdot>ID \<diamond> LCons\<cdot>a\<cdot>xs = LCons\<cdot>a\<cdot>xs
+\end{isacode}
+%
+The admissibility condition can be solved automatically by \isa{simp}. But in the other goals, the rewrites we have for \isa{zipL} do not apply yet. To use the rewrite rules we have for \isa{zipL}, we must first manually unfold \isa{repeatL\<cdot>ID} one step, and then call \isa{simp}. In this way we can solve all the remaining goals.
+
+Alternatively, we can improve automation by defining some additional rewrite rules for \isa{zipL} and \isa{repeatL}. If one argument to \isa{zipL} is \isa{repeatL}, and the other is a constructor, we can unfold \isa{repeatL} to make progress.
+%
+\indexthmx{zipL_repeatL_simps}
+\begin{isacode}
+lemma zipL_repeatL_simps [simp]:
+  "zipL\<cdot>f\<cdot>(repeatL\<cdot>x)\<cdot>\<bottom> = \<bottom>"
+  "zipL\<cdot>f\<cdot>(repeatL\<cdot>x)\<cdot>LNil = LNil"
+  "zipL\<cdot>f\<cdot>(repeatL\<cdot>x)\<cdot>(LCons\<cdot>y\<cdot>ys) = LCons\<cdot>(f\<cdot>x\<cdot>y)\<cdot>(zipL\<cdot>f\<cdot>(repeatL\<cdot>x)\<cdot>ys)"
+  "zipL\<cdot>f\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>(repeatL\<cdot>y) = LCons\<cdot>(f\<cdot>x\<cdot>y)\<cdot>(zipL\<cdot>f\<cdot>xs\<cdot>(repeatL\<cdot>y))"
+by (subst repeatL.simps, simp)+
+\end{isacode}
+%
+With these new rewrite rules in place, the proof of the identity law is now completely automatic, by induction followed by simplification.
+%
+\indexthmx{llist_identity}
+\begin{isacode}
+lemma llist_identity: "repeatL\<cdot>ID \<diamond> xs = xs"
+  by (induct xs, simp_all)
+\end{isacode}
+%
+The \isa{zipL_repeatL_simps} rules also make it possible to prove the interchange law with a similar level of automation:
+%
+\indexthmx{llist_interchange}
+\begin{isacode}
+lemma llist_interchange: "fs \<diamond> repeatL\<cdot>x = repeatL\<cdot>(\<Lambda> f. f\<cdot>x) \<diamond> fs"
+  by (induct fs, simp_all)
+\end{isacode}
+
+The composition law \isa{repeatL\<cdot>cfcomp \<diamond> fs \<diamond> gs \<diamond> xs = fs \<diamond> (gs \<diamond> xs)} can also be proven by induction, although the proof is complicated by the fact that it mentions not one, but three list variables. In the proof script below, we induct over the first list, \isa{fs}. The \isa{\<bottom>} and \isa{LNil} cases can be solved automatically, but the \isa{LCons} case requires extra case analyses on \isa{gs} and \isa{xs}. The \isa{arbitrary: gs xs} option generalizes the inductive hypothesis by universally quantifying over the other two lists; this is because we will need the inductive hypothesis to apply not to \isa{gs} and \isa{xs}, but to the tails of those lists.
+%
+\indexthmx{llist_composition}
+\begin{isacode}
+lemma llist_composition: "repeatL\<cdot>cfcomp \<diamond> fs \<diamond> gs \<diamond> xs = fs \<diamond> (gs \<diamond> xs)"
+  by (induct fs arbitrary: gs xs, simp_all,
+      case_tac gs, simp_all, case_tac xs, simp_all)
+\end{isacode}
+
+\subsection{Coinductive proof methods}
+\label{sec:case-coinductive}
+
+Of all the four applicative functor laws for lazy lists, the most challenging to prove is the homomorphism law, \isa{repeatL\<cdot>f \<diamond> repeatL\<cdot>x = repeatL\<cdot>(f\<cdot>x)}. The technique of induction that we used for the other three laws will not work here---the homomorphism law does not mention any list variables to induct over! Instead, we must rely on \emph{coinductive} proof methods: While inductive methods reason about the structure of \emph{input} to functions, coinductive methods consider the structure of the \emph{output}. Various such proof methods are surveyed by Gibbons and Hutton~\cite{Gibbons2005}; we will consider a few of those methods here, as applied to proving the homomorphism law in \HOLCF{11}.
+
+First we consider a proof method that Gibbons and Hutton call the \emph{approximation lemma} \cite{Hutton01,Gibbons2005}; in HOLCF it is known as the \emph{take lemma}. This method uses the function \isa{llist_take :: nat \<Rightarrow> 'a llist \<rightarrow> 'a llist} generated by the \textsc{Domain} package, which satisfies the following specification:
+%
+\indexthmx{llist.take_rews}
+\begin{isacode}
+theorem llist.take_rews:
+  "llist_take 0 = \<bottom>"
+  "llist_take (Suc n)\<cdot>LNil = LNil"
+  "llist_take (Suc n)\<cdot>(LCons\<cdot>x\<cdot>xs) = LCons\<cdot>x\<cdot>(llist_take n\<cdot>xs)"
+\end{isacode}
+%
+The take lemma lets us prove that two lazy lists are equal, if we can show that \isa{llist_take n} can never distinguish them for any \isa{n}.
+%
+\indexthmx{llist.take_lemma}
+\begin{isacode}
+theorem llist.take_lemma: "(\<And>n. llist_take n\<cdot>x = llist_take n\<cdot>y) \<Longrightarrow> x = y"
+\end{isacode}
+%
+In practice, an application of \isa{llist.take_lemma} is usually followed by induction on \isa{n}. If we take this approach to proving the homomorphism law, we are then left with the following two subgoals:
+%
+\begin{isacode}
+goal (2 subgoals):
+ 1. llist_take 0\<cdot>(repeatL\<cdot>f \<diamond> repeatL\<cdot>x) = llist_take 0\<cdot>(repeatL\<cdot>(f\<cdot>x))
+ 2. \<And>n. llist_take n\<cdot>(repeatL\<cdot>f \<diamond> repeatL\<cdot>x) = llist_take n\<cdot>(repeatL\<cdot>(f\<cdot>x)) \<Longrightarrow>
+    llist_take (Suc n)\<cdot>(repeatL\<cdot>f \<diamond> repeatL\<cdot>x) = llist_take (Suc n)\<cdot>(repeatL\<cdot>(f\<cdot>x))
+\end{isacode}
+%
+The first subgoal can be solved automatically, because both sides simplify to \isa{\<bottom>}. However, before the second subgoal can be simplified further, we must manually unfold by one step each of the three applications of \isa{repeatL}. After these manual steps, the simplifier can finish the proof. All together, we get a proof script with about seven steps.
+
+Perhaps a different proof method can yield better automation? The next method we will try is \emph{fixed point induction}, which reasons about the structure of recursive calls of a function (\isa{repeatL} in this case). As described in Chapter~\ref{ch:fixrec}, a fixed point induction rule is generated for each function defined by \textsc{Fixrec}.
+%
+\indexthmx{repeatL.induct}
+\begin{isacode}
+theorem repeatL.induct:
+  "\<lbrakk>adm P; P \<bottom>; \<And>r. P r \<Longrightarrow> P (\<Lambda> x. LCons\<cdot>x\<cdot>(r\<cdot>x))\<rbrakk> \<Longrightarrow> P repeatL"
+\end{isacode}
+%
+We can prove the homomorphism law \isa{repeatL\<cdot>f \<diamond> repeatL\<cdot>x = repeatL\<cdot>(f\<cdot>x)} using \isa{repeatL.induct}. A tempting idea is to try inducting simultaneously over all three occurrences of \isa{repeatL} in parallel, but unfortunately this does not work: Each occurrence of \isa{repeatL} has a different type, and the predicate \isa{P} in \isa{repeatL.induct} can only abstract over one of them at a time. Next we might try to induct over a single function in the original goal, but we hit another problem: For the base case, exactly one occurrence of \isa{repeatL} will be replaced with \isa{\<bottom>}, leaving an unprovable goal.
+
+We can still make progress if we apply an antisymmetry rule before trying fixed point induction. In each of the two subgoals, we can induct over an occurrence of \isa{repeatL} on the left-hand side of the inequality, yielding provable base cases.
+%
+\begin{isacode}
+goal (2 subgoals):
+ 1. repeatL\<cdot>f \<diamond> repeatL\<cdot>x \<sqsubseteq> repeatL\<cdot>(f\<cdot>x)
+ 2. repeatL\<cdot>(f\<cdot>x) \<sqsubseteq> repeatL\<cdot>f \<diamond> repeatL\<cdot>x
+\end{isacode}
+%
+Because we are only inducting over one occurrence of \isa{repeatL} at a time, this means that in the inductive step, the other occurrences of \isa{repeatL} will not be unfolded for us; we will have to do this manually. Ultimately we end up with a completed proof script that is even longer and more complicated than the take lemma proof.
+
+Things would be much easier if we could do simultaneous fixed point induction! This would free us from having to do the antisymmetry step and the manual unfolding steps, yielding a much shorter, more automated proof. It turns out that there is a way to accomplish this, if we are willing to modify our function definitions a bit.
+
+The idea is to augment \isa{repeatL} with a new parameter that places a limit on the recursion depth. We can then redefine the original \isa{repeatL} in terms of the depth-limited version by calling it with an infinite depth limit. To model the (possibly infinite) depth values, we define a domain \isa{depth} with a single lazy constructor \isa{DSuc} representing successor; \isa{\<bottom>} represents zero. We use \textsc{Fixrec} to define \isa{unlimited} as the fixed point of \isa{DSuc}.
+%
+\indexdefx{domain depth}
+\begin{isacode}
+domain depth = DSuc (lazy depth)
+\end{isacode}
+\unmedskip
+\indexdefx{unlimited}
+\begin{isacode}
+fixrec unlimited :: "depth"
+  where [simp del]: "unlimited = DSuc\<cdot>unlimited"
+\end{isacode}
+%
+Next we define \isa{repeatL_depth} as a depth-limited version of \isa{repeatL}. Recursive calls decrement the depth limit by one. We can use \isa{fixrec_simp} to prove that \isa{repeatL_depth} is strict in its first argument, which assures that the recursion stops when the depth limit reaches zero (i.e., \isa{\<bottom>}).
+%
+\indexdefx{repeatL_depth}
+\begin{isacode}
+fixrec repeatL_depth :: "depth \<rightarrow> 'a \<rightarrow> 'a llist"
+  where "repeatL_depth\<cdot>(DSuc\<cdot>n)\<cdot>x = LCons\<cdot>x\<cdot>(repeatL_depth\<cdot>n\<cdot>x)"
+\end{isacode}
+%
+We define \isa{repeatL'} as the depth-unlimited version of \isa{repeatL_depth}. Using the rewrites for \isa{unlimited} and \isa{repeatL_depth}, we can prove that \isa{repeatL'} satisfies the same defining equations as the original \isa{repeatL}.
+%
+\indexdefx{repeatL'}
+\begin{isacode}
+definition repeatL' :: "'a \<rightarrow> 'a llist"
+  where "repeatL' = repeatL_depth\<cdot>unlimited"
+\end{isacode}
+
+With these definitions in place, we want to show that \isa{repeatL'} satisfies the homomorphism law, \isa{repeatL'\<cdot>f \<diamond> repeatL'\<cdot>x = repeatL'\<cdot>(f\<cdot>x)}. We start by unfolding the definition of \isa{repeatL'} to reveal applications of \isa{repeatL_depth} to \isa{unlimited}:
+%
+\begin{isacode}
+goal (1 subgoal):
+ 1. repeatL_depth\<cdot>unlimited\<cdot>f \<diamond> repeatL_depth\<cdot>unlimited\<cdot>x
+    = repeatL_depth\<cdot>unlimited\<cdot>(f\<cdot>x)
+\end{isacode}
+%
+Each occurrence of \isa{repeatL_depth} in the goal has a different type, so fixed point induction on \isa{repeatL_depth} would bring the same difficulties as before. But we have another option now: We can do fixed point induction on the depth parameter \isa{unlimited}, using the \textsc{Fixrec}-provided rule \isa{unlimited.induct}. Because all depth parameters have the same type, we can abstract over all three simultaneously.
+%
+\indexthmx{unlimited.induct}
+\begin{isacode}
+theorem unlimited.induct:
+  "\<lbrakk>adm P; P \<bottom>; \<And>x. P x \<Longrightarrow> P (DSuc\<cdot>x)\<rbrakk> \<Longrightarrow> P unlimited"
+\end{isacode}
+%
+The rest of the proof is handled automatically by the simplifier. At last, we have achieved the high level of proof automation we were aiming for:
+%
+\indexthmx{llist_homomorphism}
+\begin{isacode}
+lemma llist_homomorphism: "repeatL'\<cdot>f \<diamond> repeatL'\<cdot>x = repeatL'\<cdot>(f\<cdot>x)"
+  unfolding repeatL'_def by (rule unlimited.induct, simp_all)
+\end{isacode}
+
+Fixed point induction with depth-limited functions looks like a promising general technique for automating HOLCF proofs, but its uses are still in the experimental stage. Eventually it might be beneficial to have the \textsc{Fixrec} package automatically generate depth-limited versions of all recursive functions, but this is left for future work.
+
+\section{A concurrency monad}
+\label{sec:case-concurrency-monad}
+
+The previous section gave an example of a simple datatype definition, with relatively easy proofs. In this section, we will discuss a significantly more complex monadic type, which will give the reasoning infrastructure of \HOLCF{11} much more of a workout. In this way, we will demonstrate how well \HOLCF{11} scales up to handle verification tasks that are beyond the scope of many other theorem-proving systems, including earlier versions of HOLCF.
+
+The particular datatype considered in this section is a monad that is designed to model concurrent computations. It combines three different kinds of effects:
+%
+\begin{itemize}
+\item Resumptions, to keep track of suspended threads of computations
+\unmedskip
+\item State, to allow multiple threads to communicate with each other
+\unmedskip
+\item Nondeterminism, to model computations with unpredictable evaluation order
+\end{itemize}
+%
+The concurrency monad that we will verify here is identical to the one used by Papaspyrou~\cite{Papaspyrou01} to model the semantics of a language with concurrency primitives. The monad uses powerdomains (see Chapter~\ref{ch:powerdomain}) to model nondeterminism, so it is not a direct translation from any monad definable in Haskell. However, it is still directly relevant for verification of Haskell programs, as a model of Haskell's primitive \hs{ST} or \hs{IO} monads~\cite{thiemann95towards}.
+
+\subsection{Composing monads}
+\label{sec:case-composing-monads}
+
+Many well-known monads encode a single, specific kind of effect---such as error handling, mutable state, string output, or nondeterminism. To model computations with one kind of effect, programmers can simply use one of these standard monads. But to model computations with a unique \emph{combination} of effects, a programmer has two choices: Either write a new complex monad type all at once, by hand; or build the monad in a modular fashion, by combining a standard base monad with one or more standard \emph{monad transformers} \cite{Moggi89, LHJ95}. A monad transformer is simply a monad that is parameterized over another, ``inner'' monad. The transformed monad supports all the effects of the inner monad, and adds more of its own. Multiple monad transformers can be layered to combine as many features as the programmer needs.
+
+In this section we will follow Papaspyrou~\cite{Papaspyrou01} in defining our concurrency monad using monad transformers. Specifically, we start with the convex powerdomain to model nondeterminism. Next we wrap this in a state monad transformer, and finally with a resumption monad transformer.
+
+Using monad transformers not only makes it easier to write the monad operations, it also offers a nice way to structure the verification proofs. After introducing the state monad transformer (\S\ref{sec:case-state-transformer}), we will then discuss the verification of a state/nondeterminism monad (\S\ref{sec:case-verify-N}). Then, after covering the resumption monad transformer (\S\ref{sec:case-resumption-transformer}), we will see proofs for the full concurrency monad (\S\ref{sec:case-define-R}--\S\ref{sec:case-verify-R}).
+
+Besides the usual functor and monad operations, we will also define and verify an operation for nondeterministically interleaving two computations. Much like the \hs{zipWith} operation on lazy lists, the interleaving operator can be proven to satisfy the applicative functor laws (\S\ref{sec:case-zipR}).
+
+\subsection{State monad transformer}
+\label{sec:case-state-transformer}
+
+The \emph{state monad} is used for computations that may imperatively read and write to a location in memory. The Haskell type \hs{State s a} (Fig.~\ref{fig:case-state-monad}) is represented as a function that takes an initial state of type \hs{s}, and returns a pair containing a result of type \hs{a} and a final state.
+
+\begin{figure}
+\begin{hscode}
+newtype State s a = MkState { runState :: s -> (a, s) }
+\end{hscode}
+\begin{hscode}
+instance Functor (State s) where
+  fmap f c = MkState
+    (\s -> let (x, s') = runState c s in (f x, s'))
+\end{hscode}
+\begin{hscode}
+instance Monad (State s) where
+  return x = MkState (\s -> (x, s))
+  c >>= k = MkState
+    (\s -> let (x, s') = runState c s in runState (k x) s')
+\end{hscode}
+\caption{Haskell definition of state monad}
+\label{fig:case-state-monad}
+\end{figure}
+
+The \emph{state monad transformer} replaces the function type \hs{s -> (a, s)} with \hs{s -> m (a, s)}, for some monad \hs{m}. This allows the function on states to have some additional side-effects, depending on the choice of inner monad. The monad operations on \hs{StateT s m} are defined similarly to those for \hs{State s}, but they additionally include calls to the underlying monad operations on type \hs{m}  (Fig.~\ref{fig:case-state-transformer}).
+
+\begin{figure}
+\begin{hscode}
+newtype StateT s m a = MkStateT { runStateT :: s -> m (a, s) }
+\end{hscode}
+\begin{hscode}
+instance (Functor m) => Functor (StateT s m) where
+  fmap f c = MkStateT
+    (\s -> fmap (\(x, s') -> (f x, s')) (runStateT c s))
+\end{hscode}
+\begin{hscode}
+instance (Monad m) => Monad (StateT s m) where
+  return x = MkStateT (\s -> return (x, s))
+  c >>= k = MkStateT
+    (\s -> runStateT c s >>= \(x, s') -> runStateT (k x) s')
+\end{hscode}
+\caption{Haskell definition of state monad transformer}
+\label{fig:case-state-transformer}
+\end{figure}
+
+Recall the \hs{ChoiceMonad} type class, discussed previously in Chapter~\ref{ch:powerdomain}; it extends the \hs{Monad} type class with an additional binary choice operator. We can define a binary choice operator on \hs{StateT s m} in terms of the choice operator on monad \hs{m}, as shown in Fig.~\ref{fig:case-choicemonad}.
+
+\begin{figure}
+\begin{hscode}
+class (Monad m) => ChoiceMonad m where
+  (|+|) :: m a -> m a -> m a
+\end{hscode}
+\begin{hscode}
+instance (ChoiceMonad m) => ChoiceMonad (StateT s m) where
+  c1 |+| c2 = MkStateT (\s -> runStateT c1 s |+| runStateT c2 s)
+\end{hscode}
+\caption{Haskell \texttt{ChoiceMonad} class, with instance for state monad transformer}
+\label{fig:case-choicemonad}
+\end{figure}
+
+All of these operations on type \hs{StateT s m} should satisfy some equational laws, assuming that the operations on the inner monad \hs{m} also satisfy the appropriate laws. Verifying these laws is the subject of the next section.
+
+\subsection{Verifying a state/nondeterminism monad}
+\label{sec:case-verify-N}
+
+In this section, we will verify an instance of the state monad transformer, using the convex powerdomain as the inner monad. This combination yields a monad that implements two out of the three effects that we ultimately want: state and nondeterminism. Building on the existing powerdomain operations, we define the monad operations on this new type, along with a nondeterministic choice operator. We also use the powerdomain laws to help derive the usual laws about the new operations. (Refer to Chapter~\ref{ch:powerdomain} for the operations on the convex powerdomain, and the laws that they satisfy.)
+
+In HOLCF, we define a type \isa{('s, 'a) N} to model the state monad transformer applied to the convex powerdomain, with state type \isa{'s} and result type \isa{'a}. To avoid having to deal with HOLCF equivalents of the \hs{MkStateT} and \hs{runStateT} functions, we define \isa{N} as a type synonym. The Haskell pair type \hs{(a, s)} (which is lazy in both arguments) is modeled as a HOLCF strict product of two lifted types. We then define the HOLCF functions \isa{mapN}, \isa{unitN}, \isa{bindN}, and \isa{plusN} to model the Haskell functions \hs{fmap}, \hs{return}, \hs{(>{}>=)}, and \hs{(|+|)}, respectively. Their definitions are shown in Fig.~\ref{fig:N-operations}.
+
+\begin{figure}
+\indexdefx{type_synonym ('s, 'a) N}
+\begin{isacode}
+type_synonym ('s, 'a) N = "'s \<rightarrow> ('a\<lifted> \<otimes> 's\<lifted>)\<natural>"
+\end{isacode}
+\unmedskip
+\indexdefx{mapN}
+\begin{isacode}
+definition mapN :: "('a \<rightarrow> 'b) \<rightarrow> ('s, 'a) N \<rightarrow> ('s, 'b) N"
+  where "mapN = (\<Lambda> f. cfun_map\<cdot>ID\<cdot>(convex_map\<cdot>(sprod_map\<cdot>(u_map\<cdot>f)\<cdot>ID)))"
+\end{isacode}
+\unmedskip
+\indexdefx{unitN}
+\begin{isacode}
+definition unitN :: "'a \<rightarrow> ('s, 'a) N"
+  where "unitN = (\<Lambda> x. (\<Lambda> s. convex_unit\<cdot>(:up\<cdot>x, up\<cdot>s:)))"
+\end{isacode}
+\unmedskip
+\indexdefx{bindN}
+\begin{isacode}
+definition bindN :: "('s, 'a) N \<rightarrow> ('a \<rightarrow> ('s, 'b) N) \<rightarrow> ('s, 'b) N"
+  where "bindN = (\<Lambda> c k. (\<Lambda> s. convex_bind\<cdot>(c\<cdot>s)\<cdot>(\<Lambda> (:up\<cdot>x, up\<cdot>s':). k\<cdot>x\<cdot>s')))"
+\end{isacode}
+\unmedskip
+\indexdefx{plusN}
+\begin{isacode}
+definition plusN :: "('s, 'a) N \<rightarrow> ('s, 'a) N \<rightarrow> ('s, 'a) N"
+  where "plusN = (\<Lambda> a b. (\<Lambda> s. convex_plus\<cdot>(a\<cdot>s)\<cdot>(b\<cdot>s)))"
+\end{isacode}
+\caption{Functor, monad, and choice operations on state/nondeterminism monad}
+\label{fig:N-operations}
+\end{figure}
+
+Figure~\ref{fig:N-functor-monad} contains a list of all the relevant theorems about these operations on type \isa{('s, 'a) N} that were proved in this case study. Included are the laws for functors, monads, and choice monads---in fact, all of the powerdomain laws from Chapter~\ref{ch:powerdomain} are satisfied by the \isa{N} monad. Because \isa{('s, 'a) N} is not a recursive type, none of the proofs require any form of induction, merely case analysis. Most of them derive fairly directly from the corresponding properties of the underlying powerdomain type. All the proofs are straightforward (many are one line), and so we omit the details.
+
+\begin{figure}
+\indexthmx{mapN_ID}
+\begin{isacode}
+lemma mapN_ID:
+  "mapN\<cdot>ID = ID"
+\end{isacode}
+\unmedskip
+\indexthmx{mapN_mapN}
+\begin{isacode}
+lemma mapN_mapN:
+  "mapN\<cdot>f\<cdot>(mapN\<cdot>g\<cdot>c) = mapN\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>c"
+\end{isacode}
+\unmedskip
+\indexthmx{bindN_unitN}
+\begin{isacode}
+lemma bindN_unitN:
+  "bindN\<cdot>(unitN\<cdot>x)\<cdot>f = f\<cdot>x"
+\end{isacode}
+\unmedskip
+\indexthmx{mapN_conv_bindN}
+\begin{isacode}
+lemma mapN_conv_bindN:
+  "mapN\<cdot>f\<cdot>c = bindN\<cdot>c\<cdot>(unitN oo f)"
+\end{isacode}
+\unmedskip
+\indexthmx{bindN_unitN_right}
+\begin{isacode}
+lemma bindN_unitN_right:
+  "bindN\<cdot>c\<cdot>unitN = c"
+\end{isacode}
+\unmedskip
+\indexthmx{bindN_bindN}
+\begin{isacode}
+lemma bindN_bindN:
+  "bindN\<cdot>(bindN\<cdot>c\<cdot>f)\<cdot>g = bindN\<cdot>c\<cdot>(\<Lambda> x. bindN\<cdot>(f\<cdot>x)\<cdot>g)"
+\end{isacode}
+\unmedskip
+\indexthmx{mapN_plusN}
+\begin{isacode}
+lemma mapN_plusN:
+  "mapN\<cdot>f\<cdot>(plusN\<cdot>a\<cdot>b) = plusN\<cdot>(mapN\<cdot>f\<cdot>a)\<cdot>(mapN\<cdot>f\<cdot>b)"
+\end{isacode}
+\unmedskip
+\indexthmx{plusN_commute}
+\begin{isacode}
+lemma plusN_commute:
+  "plusN\<cdot>a\<cdot>b = plusN\<cdot>b\<cdot>a"
+\end{isacode}
+\unmedskip
+\indexthmx{plusN_assoc}
+\begin{isacode}
+lemma plusN_assoc:
+  "plusN\<cdot>(plusN\<cdot>a\<cdot>b)\<cdot>c = plusN\<cdot>a\<cdot>(plusN\<cdot>b\<cdot>c)"
+\end{isacode}
+\unmedskip
+\indexthmx{plusN_absorb}
+\begin{isacode}
+lemma plusN_absorb:
+  "plusN\<cdot>a\<cdot>a = a"
+\end{isacode}
+\caption{Laws satisfied by operations on state/nondeterminism monad}
+\label{fig:N-functor-monad}
+\end{figure}
+
+\subsection{Resumption monad transformer}
+\label{sec:case-resumption-transformer}
+
+The \emph{resumption monad transformer} \cite{Papaspyrou01} augments an inner monad with the ability to suspend, resume, and interleave threads of computations. In Haskell, we define the type \hs{ResT m a} to model resumptions with inner monad \hs{m} and result type \hs{a}.
+%
+\begin{hscode}
+data ResT m a = Done a | More (m (ResT m a))
+\end{hscode}
+%
+The value \hs{Done x} represents a computation that has run to completion, yielding the result \hs{x}. The value \hs{More c} represents a suspended computation that still has more work to do: When \hs{c} is evaluated, it may produce some side-effects (according to the monad \hs{m}) and eventually yields a new resumption of type \hs{ResT m a}. A good way to think about resumptions is as threads in a cooperative multitasking system: A running thread may either terminate (\hs{Done x}) or voluntarily yield to the operating system, waiting to be resumed later (\hs{More c}).
+
+The code for the functor and monad instances is given in Fig.~\ref{fig:case-resumption-transformer}. Note that the \hs{fmap} and \hs{(>{}>=)} are defined by using the \hs{fmap} from the underlying type constructor \hs{m} on the recursive calls.
+
+\begin{figure}
+\begin{hscode}
+data ResT m a = Done a | More (m (ResT m a))
+\end{hscode}
+\begin{hscode}
+instance (Functor m) => Functor (ResT m) where
+  fmap f (Done x) = Done (f x)
+  fmap f (More c) = More (fmap (fmap f) c)
+\end{hscode}
+\begin{hscode}
+instance (Functor m) => Monad (ResT m s) where
+  return x     = Done x
+  Done x >>= k = k x
+  More c >>= k = More (fmap (\r -> r >>= k) c)
+\end{hscode}
+\caption{Haskell definition of resumption monad transformer}
+\label{fig:case-resumption-transformer}
+\end{figure}
+
+The resumption monad transformer can be used to nondeterministically interleave two computations, when used with an inner monad that provides a binary choice operator. We can define a Haskell function \hs{zipR} that randomly interleaves two computations, and combines their results (Fig.~\ref{fig:case-zipR}). The idea is that as long as at least one of the two computations has the form \hs{More c}, \hs{zipR} chooses one, runs it for one step, and repeats. When both computations have the form \hs{Done x}, it combines the results using function \hs{f}.
+
+\begin{figure}
+\begin{hscode}
+zipR :: (ChoiceMonad m) =>
+    (a -> b -> c) -> ResT m a -> ResT m b -> ResT m c
+zipR f (Done x1) (Done x2) = Done (f x1 x2)
+zipR f (Done x1) (More c2) = More
+                             (fmap (\r -> zipR f (Done x1) r) c2)
+zipR f (More c1) (Done x2) = More
+                             (fmap (\r -> zipR f r (Done x2) r) c1)
+zipR f (More c1) (More c2) = More
+                             (fmap (\r -> zipR f (More c1) r) c2 |+|
+                              fmap (\r -> zipR f r (More c2)) c1)
+\end{hscode}
+\caption{Haskell definition of nondeterministic interleaving operator}
+\label{fig:case-zipR}
+\end{figure}
+
+The name of the function \hs{zipR} has been chosen to be reminiscent of the standard Haskell list function \hs{zipWith}, which was covered earlier in this chapter. The two functions have similar types, and it turns out that they also satisfy many of the same equational laws: Like \hs{zipWith}, \hs{zipR} forms the basis of an applicative functor instance. After formalizing and verifying the functor and monad operations in the next few sections, we will return to a verification of \hs{zipR} in Sec.~\ref{sec:case-zipR}.
+
+\subsection{Defining the full concurrency monad}
+\label{sec:case-define-R}
+
+Having already formalized the \isa{N} monad for state and nondeterminism, only one step remains: We must define the final monad by combining the \isa{N} monad with a resumption monad transformer. The domain definition shown below is handled easily by the \textsc{Domain} package:
+
+\indexdefx{domain ('s, 'a) R}
+\begin{isacode}
+domain ('s, 'a) R = Done (lazy "'a") | More (lazy "('s, ('s, 'a) R) N")
+\end{isacode}
+
+This type definition exercises some unique abilities of the \HOLCF{11} \textsc{Domain} package. First of all, note that the definition uses indirect recursion: The recursive occurrence of \isa{('s, 'a) R} is not actually an argument type of a constructor, but is wrapped inside the \isa{N} monad type---which is itself a combination of lifting, strict product, convex powerdomain, and the continuous function space. For comparison, the original \HOLCF{99} \textsc{Domain} package was not designed to handle indirect recursion at all \cite{Oheimb97}. The Isabelle/HOL \textsc{Datatype} package can handle \emph{some} indirect-recursive definitions by transforming them (internally) into equivalent mutually recursive definitions, but this only works for indirect recursion with other HOL datatypes. If the \textsc{Domain} package had been implemented with the same technique, it would not have been able to define domain \isa{R}---its indirect recursion cannot be translated away as mutual recursion, because it involves a powerdomain type. To the best of the author's knowledge, the \HOLCF{11} \textsc{Domain} package is the first formal reasoning system that can handle such a type definition.
+
+Due to the indirect recursion, however, the package warns us that it has not attempted to generate a high-level induction rule (i.e., one stated in terms of the constructors \isa{Done} and \isa{More}). The only induction rule generated for indirect-recursive domains is a low-level one in terms of take functions.
+
+\indexthmx{R.take_induct}
+\begin{isacode}
+theorem R.take_induct: "\<lbrakk>adm P; \<And>n. P (R_take n\<cdot>x)\<rbrakk> \<Longrightarrow> P x"
+\end{isacode}
+
+We can use the low-level take induction rule to generate our own high-level induction rule. Depending on the particular domain definition, there may be more than one sensible formulation of a high-level induction rule for a given indirect-recursive datatype. Generating one that will work well for the proofs about \isa{R} is the subject of the next section.
+
+\subsection{Induction rules for indirect-recursive domains}
+\label{sec:case-induct-R}
+
+There are several different ways to express induction principles over indirect-recursive datatypes. The goal of this section is to find a style of induction rule that will work well for proving results about the domain \isa{R}. To that end, we will consider a few alternatives, using a relatively simple Isabelle/HOL datatype of trees as a basis for examples.
+%
+\indexdefx{datatype 'a tree}
+\begin{isacode}
+datatype 'a tree = Leaf "'a" | Branch "'a tree list"
+\end{isacode}
+%
+For indirect-recursive datatypes like \isa{'a tree}, the \textsc{Datatype} package generates an induction rule similar to the ones produced for mutually recursive datatype definitions. Types \isa{'a tree} and \isa{'a tree list} are treated as two mutually defined datatypes; the induction rule has one predicate for each of them.
+%
+\indexthmx{tree.induct}
+\begin{isacode}
+theorem tree.induct:
+  fixes P :: "'a tree => bool" and Q :: "'a tree list => bool"
+  assumes "\<And>x. P (Leaf x)"
+  assumes "\<And>ts. Q ts \<Longrightarrow> P (Branch ts)"
+  assumes "Q []"
+  assumes "\<And>t ts. \<lbrakk>P t; Q ts\<rbrakk> \<Longrightarrow> Q (t # ts)"
+  shows "P t \<and> Q ts"
+\end{isacode}
+%
+This form of induction rule makes sense for reasoning about pairs of mutually defined functions, such as these map functions for trees and lists of trees:
+%
+\indexdefx{tree_map}
+\indexdefx{tree_list_map}
+\begin{isacode}
+primrec tree_map :: "('a => 'b) => 'a tree => 'b tree"
+  where "tree_map f (Leaf x) = Leaf (f x)"
+  | "tree_map f (Branch ts) = Branch (tree_list_map f ts)"
+and tree_list_map :: "('a => 'b) => 'a tree list => 'b tree list"
+  where "tree_list_map f [] = []"
+  | "tree_list_map f (t # ts) = tree_map f t # tree_list_map f ts"
+\end{isacode}
+%
+The mutually recursive induction rule \isa{tree.induct} is a good match for proving properties about mutually recursive functions like \isa{tree_map} and \isa{tree_list_map}, because we can have a predicate \isa{P} mentioning \isa{tree_map} and a predicate \isa{Q} mentioning \isa{tree_list_map}.
+
+On the other hand, suppose we have a single recursive function defined like this, where the newly-defined function is mapped over a list in the recursive case:
+%
+\indexdefx{tree_map'}
+\begin{isacode}
+fun tree_map' :: "('a => 'b) => 'a tree => 'b tree"
+  where "tree_map' f (Leaf x) = Leaf (f x)"
+  | "tree_map' f (Branch ts) = Branch (map (tree_map' f) ts)"
+\end{isacode}
+%
+With this style of definition, the mutual-recursion-style induction rule is awkward to use. An alternative form with a single predicate would be preferable, such as the rule \isa{tree_all_induct} shown below.
+%
+\indexthmx{tree_all_induct}
+\begin{isacode}
+lemma tree_all_induct:
+  assumes "\<And>x. P (Leaf x)"
+  assumes "\<And>ts. list_all P ts \<Longrightarrow> P (Branch ts)"
+  shows "P t"
+\end{isacode}
+%
+Here the function \isa{list_all :: ('a => bool) => 'a list => bool} is a predicate former from the list library; \isa{list_all P ts} asserts that predicate \isa{P} holds for all elements of the list \isa{ts}. We will refer to this style of rule, which refers to an \emph{all} predicate on some datatype, by the name \emph{all}-induction.
+
+As stated earlier, the recursive domain \isa{('s, 'a) R} is not equivalent to any mutually inductive domain definition, so we cannot hope to produce a mutual induction rule for type \isa{('s, 'a) R} in the style of \isa{tree.induct}. There is more hope for an all-induction rule, because it may be possible to generalize predicate formers like \isa{list_all} to other type constructors (like powerdomains) that are not necessarily datatypes.
+
+However, it turns out that there is yet another form of induction rule that generalizes even better: Instead of requiring a predicate former like \isa{list_all}, we can express an induction rule that needs nothing more than a \isa{map} function. We will refer to such rules as \emph{map}-induction rules. A map-induction rule for the \isa{'a tree} datatype is shown below.
+%
+\indexthmx{tree_map_induct}
+\begin{isacode}
+lemma tree_map_induct:
+  fixes P :: "'a tree \<Rightarrow> bool"
+  assumes 1: "\<And>x. P (Leaf x)"
+  assumes 2: "\<And>f ts. (\<forall>t::'a tree. P (f t)) \<Longrightarrow> P (Branch (map f ts))"
+  shows "P t"
+\end{isacode}
+%
+Map-induction rules in the style of \isa{tree_map_induct} generalize readily to most any indirect-recursive domain definition. Recall from Chapter~\ref{ch:domain} that map functions are already required in order to define indirect-recursive domains. Map-induction rules also work well in practice for proving properties of recursively-defined functions, as we will see later on.
+
+Map-induction rules for indirect-recursive domains can be derived from the low-level take-induction rules in a straightforward way. We will now step through the derivation of the map-induction rule for domain \isa{('s, 'a) R}, which is shown below.
+%
+\indexthmx{R_induct}
+\begin{isacode}
+lemma R_induct:
+  fixes P :: "('s, 'a) R \<Rightarrow> bool"
+  assumes adm: "adm P"
+  assumes bottom: "P \<bottom>"
+  assumes Done: "\<And>x. P (Done\<cdot>x)"
+  assumes More: "\<And>p c. (\<And>r::('s, 'a) R. P (p\<cdot>r)) \<Longrightarrow> P (More\<cdot>(mapN\<cdot>p\<cdot>c))"
+  shows "P r"
+\end{isacode}
+
+The proof starts by applying the low-level take induction rule \isa{R.take_induct}: Because \isa{P} is admissible, to prove \isa{P r} it is sufficient to show that \isa{P (R_take n\<cdot>r)} for all natural numbers \isa{n}. The remainder of the proof proceeds by showing \isa{\<forall>r. P (R_take n\<cdot>r)} by induction on \isa{n}.
+
+In the base case \isa{n = 0}, we have \isa{R_take n\<cdot>r = \<bottom>}. The goal \isa{\<forall>r. P \<bottom>} can then be solved immediately using the assumptions.
+
+In the inductive case \isa{n = Suc n'}, we proceed by case analysis on \isa{r}. The three possibilities are \isa{r = \<bottom>}, \isa{r = Done\<cdot>x}, and \isa{r = More\<cdot>c}. By the definition of \isa{R_take}, we then have \isa{R_take n\<cdot>r = \<bottom>}, \isa{Done\<cdot>x}, or \isa{More\<cdot>(mapN\<cdot>(R_take n')\<cdot>c)}, respectively. Each of these subcases can be discharged using the assumptions together with the inductive hypothesis.
+
+\subsection{Verifying functor and monad laws}
+\label{sec:case-verify-R}
+
+Recall the Haskell code for the resumption monad transformer from Fig.~\ref{fig:case-resumption-transformer}. We translate these definitions directly into HOLCF using the \textsc{Fixrec} package, as shown below. Note that we do not define a separate \isa{returnR} function in HOLCF; the relevant properties are stated directly in terms of the \isa{Done} constructor.
+
+\indexdefx{mapR}
+\begin{isacode}
+fixrec mapR :: "('a \<rightarrow> 'b) \<rightarrow> ('s, 'a) R \<rightarrow> ('s, 'b) R"
+  where mapR_Done: "mapR\<cdot>f\<cdot>(Done\<cdot>x) = Done\<cdot>(f\<cdot>x)"
+  | mapR_More: "mapR\<cdot>f\<cdot>(More\<cdot>n) = More\<cdot>(mapN\<cdot>(mapR\<cdot>f)\<cdot>n)"
+\end{isacode}
+\unmedskip
+\indexdefx{bindR}
+\begin{isacode}
+fixrec bindR :: "('s, 'a) R \<rightarrow> ('a \<rightarrow> ('s, 'b) R) \<rightarrow> ('s, 'b) R"
+  where bindR_Done: "bindR\<cdot>(Done\<cdot>x)\<cdot>k = k\<cdot>x"
+  | bindR_More: "bindR\<cdot>(More\<cdot>c)\<cdot>k = More\<cdot>(mapN\<cdot>(\<Lambda> r. bindR\<cdot>r\<cdot>k)\<cdot>c)"
+\end{isacode}
+
+In addition to the defining equations, we also need strictness rules for \isa{mapR} and \isa{bindR}; these are provided by \isa{fixrec_simp}.
+%
+\indexthmx{mapR_strict}
+\begin{isacode}
+lemma mapR_strict [simp]: "mapR\<cdot>f\<cdot>\<bottom> = \<bottom>"
+  by fixrec_simp
+\end{isacode}
+\unmedskip
+\indexthmx{bindR_strict}
+\begin{isacode}
+lemma bindR_strict [simp]: "bindR\<cdot>\<bottom>\<cdot>k = \<bottom>"
+  by fixrec_simp
+\end{isacode}
+
+Now we will see how well our induction rule \isa{R_induct} from the previous section works in practice, by using it to make highly automated proofs of the functor and monad laws. We examine one proof in detail, showing that \isa{mapR} preserves function composition.
+
+\indexthmx{mapR_mapR}
+\begin{isacode}
+lemma mapR_mapR: "mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>r) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>r"
+  apply (induct r rule: R_induct)
+\end{isacode}
+%
+Applying the induction rule leaves us with four subgoals: an admissibility side condition, base cases for \isa{\<bottom>} and \isa{Done\<cdot>x}, and an inductive case for \isa{More\<cdot>(mapN\<cdot>p\<cdot>c)}.
+%
+\begin{isacode}
+goal (4 subgoals):
+ 1. adm (\<lambda>a. mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>a) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>a)
+ 2. mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>\<bottom>) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>\<bottom>
+ 3. \<And>x. mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>(Done\<cdot>x)) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>(Done\<cdot>x)
+ 4. \<And>p c. (\<And>r. mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>(p\<cdot>r)) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>(p\<cdot>r)) \<Longrightarrow>
+  mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>(More\<cdot>(mapN\<cdot>p\<cdot>c))) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>(More\<cdot>(mapN\<cdot>p\<cdot>c))
+\end{isacode}
+%
+The first three subgoals can be solved directly by the simplifier, using the defining properties of \isa{mapR}. If we simplify the conclusion of the final subgoal using \isa{mapR_More}, it reduces to the following:
+%
+\begin{isacode}
+mapN\<cdot>(mapR\<cdot>f)\<cdot>(mapN\<cdot>(mapR\<cdot>g)\<cdot>(mapN\<cdot>p\<cdot>c)) =
+  mapN\<cdot>(mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x)))\<cdot>(mapN\<cdot>p\<cdot>c)
+\end{isacode}
+%
+We can see that the subgoal now contains instances of \isa{mapN} applied to \isa{mapN}. If we rewrite using the rule \isa{mapN_mapN}, the subgoal reduces further:
+%
+\begin{isacode}
+mapN\<cdot>(\<Lambda> x. mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>(p\<cdot>x)))\<cdot>c =
+  mapN\<cdot>(\<Lambda> x. mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>(p\<cdot>x))\<cdot>c
+\end{isacode}
+%
+Finally, the remaining subgoal can now be solved using the inductive hypothesis. In the final proof script, we can perform all of these rewriting steps at once with a single call to the simplifier, yielding an easy one-line proof:
+%
+\indexthmx{mapR_mapR}
+\begin{isacode}
+lemma mapR_mapR: "mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>r) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>r"
+  by (induct r rule: R_induct, simp_all add: mapN_mapN)
+\end{isacode}
+
+All of the functor and monad laws for the \isa{('s, 'a) R} monad shown in Fig.~\ref{fig:R-functor-monad} have similar one-line proofs, using induction followed by simplification. The fact that this level of automation is possible demonstrates the general utility of map-induction.
+
+\begin{figure}
+\indexthmx{mapR_mapR}
+\begin{isacode}
+lemma mapR_mapR: "mapR\<cdot>f\<cdot>(mapR\<cdot>g\<cdot>r) = mapR\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>r"
+  by (induct r, simp_all add: mapN_mapN)
+\end{isacode}
+\unmedskip
+\indexthmx{mapR_ID}
+\begin{isacode}
+lemma mapR_ID: "mapR\<cdot>ID\<cdot>r = r"
+  by (induct r, simp_all add: mapN_mapN eta_cfun)
+\end{isacode}
+\unmedskip
+\indexthmx{bindR_Done_right}
+\begin{isacode}
+lemma bindR_Done_right: "bindR\<cdot>r\<cdot>Done = r"
+  by (induct r, simp_all add: mapN_mapN eta_cfun)
+\end{isacode}
+\unmedskip
+\indexthmx{mapR_conv_bindR}
+\begin{isacode}
+lemma mapR_conv_bindR: "mapR\<cdot>f\<cdot>r = bindR\<cdot>r\<cdot>(\<Lambda> x. Done\<cdot>(f\<cdot>x))"
+  by (induct r, simp_all add: mapN_mapN)
+\end{isacode}
+\unmedskip
+\indexthmx{bindR_bindR}
+\begin{isacode}
+lemma bindR_bindR: "bindR\<cdot>(bindR\<cdot>r\<cdot>f)\<cdot>g = bindR\<cdot>r\<cdot>(\<Lambda> x. bindR\<cdot>(f\<cdot>x)\<cdot>g)"
+  by (induct r, simp_all add: mapN_mapN)
+\end{isacode}
+
+\caption{Functor and monad laws for concurrency monad}
+\label{fig:R-functor-monad}
+\end{figure}
+
+\subsection{Verification of nondeterministic interleaving}
+\label{sec:case-zipR}
+
+In this section we will see how to formalize and verify the nondeterministic interleaving operator in \HOLCF{11}. We model the Haskell function \hs{zipR}, given previously in Fig.~\ref{fig:case-zipR}, as the HOLCF function \isa{zipR}. The definition, using \textsc{Fixrec}, is shown in Fig.~\ref{fig:case-fixrec-zipR}. The translation is mostly direct, but note that we fix the inner monad \hs{m} to be the \isa{N} monad in HOLCF, so \hs{fmap} and \hs{(|+|)} translate to \isa{mapN} and \isa{plusN}, respectively.
+
+\begin{figure}
+\indexdefx{zipR}
+\indexthmx{zipR_Done_Done}
+\indexthmx{zipR_Done_More}
+\indexthmx{zipR_More_Done}
+\indexthmx{zipR_More_More}
+\begin{isacode}
+fixrec zipR :: "('a \<rightarrow> 'b \<rightarrow> 'c) \<rightarrow> ('s, 'a) R \<rightarrow> ('s, 'b) R \<rightarrow> ('s, 'c) R"
+  where zipR_Done_Done:
+    "zipR\<cdot>f\<cdot>(Done\<cdot>x)\<cdot>(Done\<cdot>y) = Done\<cdot>(f\<cdot>x\<cdot>y)"
+  | zipR_Done_More:
+    "zipR\<cdot>f\<cdot>(Done\<cdot>x)\<cdot>(More\<cdot>b) = More\<cdot>(mapN\<cdot>(\<Lambda> r. zipR\<cdot>f\<cdot>(Done\<cdot>x)\<cdot>r)\<cdot>b)"
+  | zipR_More_Done:
+    "zipR\<cdot>f\<cdot>(More\<cdot>a)\<cdot>(Done\<cdot>y) = More\<cdot>(mapN\<cdot>(\<Lambda> r. zipR\<cdot>f\<cdot>r\<cdot>(Done\<cdot>y))\<cdot>a)"
+  | zipR_More_More:
+    "zipR\<cdot>f\<cdot>(More\<cdot>a)\<cdot>(More\<cdot>b) = More\<cdot>
+      (plusN\<cdot>(mapN\<cdot>(\<Lambda> r. zipR\<cdot>f\<cdot>(More\<cdot>a)\<cdot>r)\<cdot>b)\<cdot>(mapN\<cdot>(\<Lambda> r. zipR\<cdot>f\<cdot>r\<cdot>(More\<cdot>b))\<cdot>a))"
+\end{isacode}
+\caption{HOLCF definition of nondeterministic interleaving operator}
+\label{fig:case-fixrec-zipR}
+\end{figure}
+
+In addition to the defining equations supplied by \textsc{Fixrec}, we can also prove lemmas stating that \isa{zipR} is strict in its second and third arguments, with the aid of the \isa{fixrec_simp} method.
+
+%\begin{isacode}
+%lemma zipR_strict1 [simp]: "zipR\<cdot>f\<cdot>\<bottom>\<cdot>r = \<bottom>"
+%  by fixrec_simp
+%\end{isacode}
+%\unmedskip
+%\begin{isacode}
+%lemma zipR_strict2 [simp]: "zipR\<cdot>f\<cdot>r\<cdot>\<bottom> = \<bottom>"
+%  by (cases r, fixrec_simp+)
+%\end{isacode}
+
+In order to state the applicative functor laws, we need HOLCF equivalents for the Haskell operations \hs{(<*>)} and \hs{pure}. Just as we did for lazy lists, we define an abbreviation for \isa{zipR\<cdot>ID} with infix syntax to represent \hs{(<*>)}. The constructor function \isa{Done} takes the place of \hs{pure}.
+%
+\indexdefx{apR}
+\begin{isacode}
+abbreviation apR (infixl "\<diamond>" 70)
+  where "a \<diamond> b \<equiv> zipR\<cdot>ID\<cdot>a\<cdot>b"
+\end{isacode}
+
+With the definitions in place, we can now start to prove the applicative functor laws. Surprisingly, the homomorphism law---which was by far the trickiest to verify for lazy lists---is the easiest to prove for the \isa{R} monad. The law follows directly from \isa{zipR_Done_Done}, one of the defining equations of \isa{zipR}.
+
+\indexthmx{R_homomorphism}
+\begin{isacode}
+lemma R_homomorphism: "Done\<cdot>f \<diamond> Done\<cdot>x = Done\<cdot>(f\<cdot>x)"
+  by simp
+\end{isacode}
+
+The proofs of the identity and interchange laws are also easy. They both have proofs similar to those for the functor and monad laws, by induction and simplification with \isa{mapN_mapN} (and also eta-contraction, as needed).
+
+\indexthmx{R_identity}
+\begin{isacode}
+lemma R_identity: "Done\<cdot>ID \<diamond> r = r"
+  by (induct r, simp_all add: mapN_mapN eta_cfun)
+\end{isacode}
+\unmedskip
+\indexthmx{R_interchange}
+\begin{isacode}
+lemma R_interchange: "r \<diamond> Done\<cdot>x = Done\<cdot>(\<Lambda> f. f\<cdot>x) \<diamond> r"
+  by (induct r, simp_all add: mapN_mapN)
+\end{isacode}
+
+Of the four applicative functor laws, the associativity law stands out as the tricky one to prove. The fact that the law mentions three variables of type \isa{('s, 'a) R} necessarily complicates the proof.
+%
+\indexthmx{R_associativity}
+\begin{isacode}
+lemma R_associativity: "Done\<cdot>cfcomp \<diamond> r1 \<diamond> r2 \<diamond> r3 = r1 \<diamond> (r2 \<diamond> r3)"
+\end{isacode}
+%
+For lazy lists, the proof of the associativity law only requires induction over one list variable, with case analysis on the other two. The reason this works is that in the definition of \isa{zipL}, every argument decreases with every recursive call---specifically, \isa{zipL\<cdot>(LCons\<cdot>x\<cdot>xs)\<cdot>(LCons\<cdot>y\<cdot>ys)} only makes a recursive call to \isa{zipL\<cdot>xs\<cdot>ys}. So with a single induction over either \isa{xs} or \isa{ys}, we can be sure that the inductive hypothesis will apply to the result of any recursive call.
+
+In contrast, recursive calls to \isa{zipR} only decrease one argument, while the other stays the same---and it is not always the same one! Thus a single induction will not suffice. To prove the associativity law for \isa{zipR}, we must perform nested inductions: First, induct over \isa{r1}; within each case of the induction, proceed by another induction over \isa{r2}; finally, prove each of \emph{those} cases by induction over \isa{r3}.
+
+Without knowing beforehand whether it would work, a proof of \isa{R_associativity} was attempted using this strategy: Do nested inductions as needed with \isa{R_induct}, and discharge subgoals by simplification. The proof attempt was a real test of the map-induction principle of \isa{R_induct}: An induction principle that is too weak could have easily led to a proof state with unprovable subgoals. Fortunately, this did not happen with the proof of \isa{R_associativity}, and the proof was completed as planned. Although the proof is rather lengthy, it goes through without getting stuck, and without requiring additional lemmas.
+
+Figure~\ref{fig:case-R-assoc-proof} gives a cleaned-up version of the complete proof script. To keep track of the numerous inductions and subcases, the proof is presented in Isabelle's structured-proof style. The command \isa{proof (induct ...)} starts a new proof by induction. Within an induction proof, \isa{CASE (...)} selects a subgoal to work on, assuming any inductive hypotheses and binding the new subgoal to the variable \isa{?case}. The \isa{qed} command closes a block opened by \isa{proof}; the variant \isa{qed simp_all} says to prove any remaining subcases using the simplifier.
+
+Recall that an induction with \isa{R_induct} actually yields four subgoals: An admissibility condition, and cases for \isa{\<bottom>}, \isa{Done\<cdot>x}, and \isa{More\<cdot>(mapN\<cdot>p\<cdot>c)}. If all three cases always required nested inductions to prove, this would have resulted in a proof script with $3^3 = 27$ separate subcases to discharge, in addition to the admissibility checks. Fortunately, there are some shortcuts---for example, because \isa{zipR} is strict, any \isa{\<bottom>} cases can be proved immediately without needing an inner induction.
+
+\begin{figure}
+\indexthmx{R_associativity}
+\def\baselinestretch{1.0}
+\lstset{language=Isabelle, xleftmargin=\parindent, basicstyle=\small\sffamily}
+\begin{lstlisting}
+lemma R_associativity: "Done\<cdot>cfcomp \<diamond> r1 \<diamond> r2 \<diamond> r3 = r1 \<diamond> (r2 \<diamond> r3)"
+proof (induct r1 arbitrary: r2 r3)
+    CASE (Done x1) thus ?case
+    proof (induct r2 arbitrary: r3)
+        CASE (Done x2) thus ?case
+        proof (induct r3)
+            CASE (More p3 c3) thus ?case (* Done/Done/More *)
+                by (simp add: mapN_mapN)
+        qed simp_all
+    next
+        CASE (More p2 c2) thus ?case
+        proof (induct r3)
+            CASE (Done x2) thus ?case (* Done/More/Done *)
+                by (simp add: mapN_mapN)
+        next
+            CASE (More p3 c3) thus ?case (* Done/More/More *)
+                by (simp add: mapN_mapN mapN_plusN)
+        qed simp_all
+    qed simp_all
+next
+    CASE (More p1 c1) thus ?case
+    proof (induct r2 arbitrary: r3)
+        CASE (Done x2) thus ?case
+        proof (induct r3)
+            CASE (Done x3) thus ?case (* More/Done/Done *)
+                by (simp add: mapN_mapN)
+        next
+            CASE (More p3 c3) thus ?case (* More/Done/More *)
+                by (simp add: mapN_mapN)
+        qed simp_all
+    next
+        CASE (More p2 c2) thus ?case
+        proof (induct r3)
+            CASE (Done x3) thus ?case (* More/More/Done *)
+                by (simp add: mapN_mapN mapN_plusN)
+        next
+            CASE (More p3 c3) thus ?case (* More/More/More *)
+                by (simp add: mapN_mapN mapN_plusN plusN_assoc)
+        qed simp_all
+    qed simp_all
+qed simp_all
+\end{lstlisting}
+\caption{Full proof of associativity for nondeterministic interleaving operator}
+\label{fig:case-R-assoc-proof}
+\end{figure}
+
+The remaining cases are solvable with varying levels of effort. The \isa{Done/Done}{\slash}\isa{Done} case can be solved automatically by simplification, no extra lemmas needed. Subgoals where exactly two of the three computations are \isa{Done} can be solved by simplifying with the additional rule \isa{mapN_mapN}, as in the proofs of the functor and monad laws.
+
+Cases where only one of the three computations is \isa{Done} require a little more work. For example, in the \isa{Done/More/More} case, we have the following inductive hypotheses and proof obligation:
+%
+\begin{isacode}
+  \<And>r3. Done\<cdot>cfcomp \<diamond> Done\<cdot>x1 \<diamond> More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> p3\<cdot>r3 =
+    Done\<cdot>x1 \<diamond> (More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> p3\<cdot>r3)
+  \<And>r2 r3. Done\<cdot>cfcomp \<diamond> Done\<cdot>x1 \<diamond> p2\<cdot>r2 \<diamond> r3 = Done\<cdot>x1 \<diamond> (p2\<cdot>r2 \<diamond> r3)
+\end{isacode}
+\pagebreak
+\begin{isacode}
+goal (1 subgoal):
+ 1. Done\<cdot>cfcomp \<diamond> Done\<cdot>x1 \<diamond> More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> More\<cdot>(mapN\<cdot>p3\<cdot>c3) =
+    Done\<cdot>x1 \<diamond> (More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> More\<cdot>(mapN\<cdot>p3\<cdot>c3))
+\end{isacode}
+%
+After inserting the inductive hypotheses and applying \isa{(simp add: mapN_mapN)}, we get stuck with the following unsolved goal:
+%
+\begin{isacode}
+goal (1 subgoal):
+ 1. \<lbrakk>\<And>r3. More\<cdot>(mapN\<cdot>(\<Lambda> x. Done\<cdot>(cfcomp\<cdot>x1) \<diamond> p2\<cdot>x)\<cdot>c2) \<diamond> p3\<cdot>r3 =
+         Done\<cdot>x1 \<diamond> (More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> p3\<cdot>r3);
+     \<And>r2 r3. Done\<cdot>(cfcomp\<cdot>x1) \<diamond> p2\<cdot>r2 \<diamond> r3 = Done\<cdot>x1 \<diamond> (p2\<cdot>r2 \<diamond> r3)\<rbrakk>
+    \<Longrightarrow> plusN\<cdot>(mapN\<cdot>(\<Lambda> r3. Done\<cdot>x1 \<diamond> (More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> p3\<cdot>r3))\<cdot>c3)\<cdot>
+       (mapN\<cdot>(\<Lambda> x. Done\<cdot>x1 \<diamond> (p2\<cdot>x \<diamond> More\<cdot>(mapN\<cdot>p3\<cdot>c3)))\<cdot>c2) =
+       mapN\<cdot>(\<Lambda> r. Done\<cdot>x1 \<diamond> r)\<cdot>
+       (plusN\<cdot>(mapN\<cdot>(\<Lambda> r3. More\<cdot>(mapN\<cdot>p2\<cdot>c2) \<diamond> p3\<cdot>r3)\<cdot>c3)\<cdot>
+        (mapN\<cdot>(\<Lambda> r2. p2\<cdot>r2 \<diamond> More\<cdot>(mapN\<cdot>p3\<cdot>c3))\<cdot>c2))
+\end{isacode}
+%
+Note that the right-hand side of the conclusion has the form \isa{mapN\<cdot>f\<cdot>(plusN\<cdot>x\<cdot>y)}. Fortunately we have a rewrite rule \isa{mapN_plusN} (Fig.~\ref{fig:N-functor-monad}) that matches this pattern. If we back up and try \isa{(simp add: mapN_mapN mapN_plusN)}, then the subgoal is discharged in one step. The general lesson about map-induction is this: Successful proofs require the map function to distribute over any other functions (such as \isa{mapN} or \isa{plusN}) that may surround recursive calls.
+
+The \isa{More/More/More} case also requires simplification with extra rewrite rules. We might start by trying \isa{(simp add: mapN_mapN mapN_plusN)} again, which we used to solve the \isa{Done/More/More} case. This leaves an unsolved goal, which is an equality between two very large terms---it is not worth the space to repeat it here. The one important detail about the leftover goal is that it has the form \isa{plusN\<cdot>x\<cdot>(plusN\<cdot>y\<cdot>z) = plusN\<cdot>(plusN\<cdot>x\<cdot>y)\<cdot>z}, which is an instance of rule \isa{plusN_assoc} (Fig.~\ref{fig:N-functor-monad}). By also including this rule in the call to the simplifier, the subgoal can be discharged in one step. Following this pattern, every subgoal is solved by simplification with an appropriate set of rewrite rules; this concludes the proof.
+
+The proof of \isa{R_associativity} using the map-induction rule \isa{R_induct} shows that map-induction is not only useful for small or obvious lemmas. It is a strong enough reasoning principle to be useful for exploratory proving of complex theorems.
+
+\section{Summary}
+\label{sec:case-summary}
+
+Based on the case studies presented in this chapter, we can make some conclusions about the expressiveness and automation of \HOLCF{11}. In terms of expressiveness, we have seen that the definition packages of \HOLCF{11} let users express a wide variety of programs in a direct and concise way. The \textsc{Fixrec} package provides input notation that is similar to Haskell syntax, making it easy to translate programs into HOLCF. Users can define arbitrary recursive functions with pattern matching, without having to use explicit fixed point combinators and without having to prove termination. Likewise, the new \textsc{Domain} package makes it easy to translate a wide variety of Haskell datatypes into \HOLCF{11}. In particular, the ability to define and reason about indirect-recursive datatypes opens up HOLCF to an important new class of programs, including many interesting Haskell monads. New theory libraries in \HOLCF{11} also contribute to its expressiveness. Specifically, the powerdomain library expands HOLCF's range to include nondeterministic and concurrent programs.
+
+In addition to expressiveness, \HOLCF{11} provides a high level of proof automation. In the introduction we claimed that easy proofs should be almost completely automatic, and we have seen that many lemmas can be proved with one-line proof scripts, using induction and simplification. Instead of dealing with mundane details, proof effort can be focused on more interesting tasks, like identifying important lemmas. We also claimed that the automation helps to make larger, more complex proofs more feasible, by letting users focus on only the interesting parts of proofs. The proof of associativity for the nondeterministic interleaving operator is evidence of this: We can write a proof script where only those subcases with nontrivial proofs are considered explicitly; admissibility checks and trivial induction cases can be handled automatically, without having to mention them in the proof script.
+
+\section{Comparison to Related Work}
+\label{sec:case-related}
+
+We claim that \HOLCF{11} has an unprecedented combination of expressiveness, automation, and confidence. To substantiate this claim, we evaluate several other reasoning tools along these dimensions.
+
+\paragraph{Informal verification.}
+
+To start with, it may be instructive to compare the \HOLCF{11} concurrency monad case study from this chapter with manual proofs of the same theorems. As a companion to his conference paper \cite{Papaspyrou01}, Papaspyrou provides detailed hand-written proofs of several properties about the resumption monad transformer in a technical report \cite{Papaspyrou2001tech}. The proofs are based on a domain-theoretic model of recursive types, taking advantage of the bifinite structure of the resumption monad: Instead of reasoning about the recursively-defined domain directly, Papaspyrou instead works with the sequence of finite domains that approximate it. Results are then transferred from the finite domains to the full recursive domain in a separate step.
+
+Informal reasoning provides no automation, but it gives a lot of flexibility in terms of expressiveness. With no tool-imposed limits, it is possible to reason about any kind of program that has a known mathematical or domain-theoretical model. However, informal proofs are limited in terms of confidence, because each proof must be read and understood in order to be trusted. This can become a major limitation as proofs grow in size.
+
+Papaspyrou's manual proofs of the functor and monad laws for the resumption monad, including auxiliary definitions and lemmas, take up about 9$\frac{1}{2}$ pages of the document \cite{Papaspyrou2001tech}. Papaspyrou did not attempt any manual proofs about the more complicated interleaving operation, but we can estimate the relative proof complexity by looking at the HOLCF scripts: Most of the functor and monad law proofs, whose informal proofs take almost a page each, have one- or two-line proofs in HOLCF. In comparison, the associativity law \isa{R_associativity} has a 40-line HOLCF proof script (Fig.~\ref{fig:case-R-assoc-proof}); at this ratio, one can imagine the amount of hand-written proof text it would take to prove \isa{R_associativity} with a similar level of rigor. At this scale, it becomes difficult for a reader to check a written proof for correctness, which limits the confidence in manually-proven results.
+
+Simpler domain-theoretic models can yield shorter informal proofs that are easier to understand and check. For example, the induction principles used in Bird's Haskell textbook \cite{Bird1998Introduction} and the approximation lemma of Hutton and Gibbons \cite{Hutton01} are proof techniques based on a simpler category of cpos, and they yield simpler proofs. But of course, there is a tradeoff here with expressiveness, because simpler models can represent fewer datatypes and programs.
+
+\paragraph{Formalizations of domain theory.}
+
+The previous systems most similar to \HOLCF{11} were of course earlier versions of HOLCF; we have already made numerous comparisons in the previous chapters. We have also discussed some features of Agerholm's similar HOL-CPO system in Chapters~\ref{ch:holcf} and \ref{ch:universal} \cite{agerholm94thesis}. The HOL-CPO system was comparable to \HOLCF{95} in terms of its expressive power and proof automation. It also included a tree-based universal domain that was intended for constructing polynomial (i.e., sum-of-products) datatypes like lazy lists, although the process was not automated. The \HOLCF{99} \textsc{Domain} package brought much more automation for defining datatypes; however, this was achieved at the expense of confidence, because of its axiomatic implementation. While HOL-CPO had very little automation for defining datatypes, it did at least preserve confidence by using a definitional approach.
+
+More recently, Benton, et al.\ have formalized a significant amount of domain theory in the Coq theorem prover \cite{bkv2009coq}. They implemented sufficient machinery to construct solutions to recursive domain equations. The functionality is comparable to that provided by the universal domain and algebraic deflation libraries of \HOLCF{11}, although Benton, et al.\ use different methods to achieve the same result. Like \HOLCF{11}, their formalization is completely definitional, asserting no new axioms. However, their system provides little automation for verifying individual functional programs. Their main emphasis has been on doing programming-language meta-theory---i.e., building denotational models of other programming languages and reasoning about the models---rather than on verification of specific programs. To illustrate this point, note that their system lacks lambda-binder syntax \isa{(\<Lambda>x. t)} for writing continuous functions; instead users must compose functions from basic combinators like S and K.
+
+\paragraph{General-purpose interactive theorem provers.}
+
+In the earlier chapters, we have already discussed the relationship between HOLCF and the original LCF series of theorem provers. Having a first-order logic, the LCF provers had a less expressive property language than HOLCF. The definition packages in \HOLCF{11} also yield improvements in expressiveness and automation over LCF, which did not provide packages for either recursive datatypes or functions.
+
+On the other hand, more recent theorem provers in the HOL family (Isabelle{\slash}HOL, Gordon HOL/HOL4, HOL Light) do provide packages for defining datatypes and recursive functions \cite{melham89automating,Slind96recdef,bw99inductivedatatypes}. Each supports an input syntax similar to most functional programming languages, and can be used to define many datatypes and functions that are commonly used by functional programmers. However, these packages generally provide only inductive datatypes, and allow only terminating functions (usually with either primitive or well-founded recursion). That is, unlike Haskell, datatypes never include any partial values (like \isa{\<bottom>}) or infinite values. We can use higher order logic to reason about Haskell programs, but the reasoning is only valid if we restrict our consideration to the total, terminating fragment of the language \cite{dghj06fastloose}. For example, \isa{\<forall>xs. reverse (reverse xs) = xs} is a theorem in Isabelle/HOL, and although it does not hold for all lazy lists in Haskell, it is valid if we interpret the quantification as ranging over only finite, total lists. Haskell programs that produce or consume infinite or partial values are beyond the scope of such tools.
+
+In addition to inductive datatypes, a few theorem provers also provide support for coinductive datatypes (or ``codatatypes''), which include both finite and infinite values. The primary example is Coq, which has mature support for coinductive types \cite{Gimenez1995}. This feature lets users define programs that produce infinite values, as long as they are provably productive. In other words, codatatypes include infinite values, but not partial values. Thus support for codatatypes allows a larger class of Haskell programs to be formalized, although not as many as in HOLCF.
+
+Coq uses a dependently-typed logic, which is more expressive than the simply-typed logic implemented in Isabelle and other HOL provers. The programming language ML uses a type system similar to Isabelle's, so HOLCF can express most all ML datatypes and programs; but Haskell has a richer type system intermediate between Isabelle and Coq. 
+As a result, Haskell programs that use certain type system features cannot be formalized in HOLCF. Perhaps the most painful restriction is Isabelle's inability to express higher-order types, such as monad transformers, which are parameterized by other type constructors. (Note that the HOLCF formalization of the resumption monad transformer described earlier in this chapter used a fixed inner monad. Having the inner monad as a type parameter would be preferable---and such higher-order types are perfectly representable in the \HOLCF{11} universal domain---but unfortunately such types are not expressible in Isabelle.) Isabelle's type system also rules out higher-rank polymorphism, existential datatypes, and nested datatypes \cite{bird98nested}, even though these could also be modeled in the universal domain. In contrast, Coq would have no problem expressing programs with any of these kinds of types. In summary, neither Coq nor \HOLCF{11} is clearly more expressive than the other: Each can directly formalize some functional programs that the other cannot.
+
+Coq and Isabelle have different approaches to automation. In Coq, users have a selection of numerous proof tactics with small, precise, predictable effects. Accordingly, Coq proof scripts often tend to contain many explicit details. On the other hand, Isabelle focuses more on just a few commonly-used tactics (particularly \isa{induct}, \isa{simp}, and \isa{auto}) which are very powerful and extensible. Isabelle's simplifier (used by both \isa{simp} and \isa{auto}) played an important role in the development of \HOLCF{11}: Much of the proof automation in \HOLCF{11} was implemented purely by choosing a set of carefully-formulated conditional rewrite rules to declare to the simplifier. Common subgoals involving admissibility, continuity, chains, comparisons, strictness, and more are all solvable by the simplifier. This is what makes the highly automatic induct-and-simplify proof scripts possible in \HOLCF{11}.
+
+Each of the interactive theorem provers mentioned above is built on a small trusted proof kernel, inspired by the LCF-style architecture, so they provide a high-confidence argument for correctness. Perhaps HOL Light has a slight advantage over the others (including Isabelle) because it has the smallest, simplest proof kernel.
+
+\paragraph{Language-specific interactive proof systems.}
+
+Interactive proof tools exist that are specifically designed for reasoning about a specific programming language. Of these, the \textsc{Sparkle} theorem prover \cite{Mol01} is the most closely related to \HOLCF{11} in terms of its aims and its capabilities.
+
+\textsc{Sparkle} is an interactive theorem prover that is custom-designed for reasoning about programs written in the lazy functional language \textsc{Clean}. Like HOLCF, it models language features like bottoms, partial and infinite values, strictness and laziness properties of functions, and strict and lazy datatypes. Datatype and function definitions are specified directly as programs written in (a subset of) the \textsc{Clean} language. Except for translating away a few unsupported language features, it is then almost trivial to import a \textsc{Clean} program into \textsc{Sparkle}: The prover reasons directly on the source representation, so no translation process is necessary. (This is in contrast to HOLCF, which is intended to be able to express a common subset of various functional languages, but requires a bit of translation e.g.\ from Haskell.)
+
+While the expressiveness of \textsc{Sparkle} is very good for programs and datatypes, the formula language is more restricted. Properties in \textsc{Sparkle} are expressed in a fixed formula language that includes equality, various logical connectives, and universal and existential quantification. User-defined predicates are limited to executable functions that produce booleans. Like the original LCF systems, it is first-order, so it is not possible to express induction principles as theorems---the hardwired induction tactic is the only form of induction available. (It is, however, possible to state and prove take lemmas.)
+
+As for automation, \textsc{Sparkle} has a collection of built-in proof tactics, including rewriting, induction over datatypes, case analysis, and many others. It also has a hint mechanism that can select and apply tactics automatically, so proofs of some simple theorems can completed without user interaction. In terms of its proof capabilities, \textsc{Sparkle} can handle all the proofs about lazy lists that were shown in Sec.~\ref{sec:case-lazy-list}, although the automation has problems with functions like \hs{repeat}, whose definitions can cause some rewriting strategies to loop.
+
+\textsc{Sparkle} is implemented in the \textsc{Clean} language. However, it does not adhere to the LCF architecture---to trust in the correctness of a proof, it is necessary to trust the code implementing each tactic used in the proof. Having to trust the implementation code of every tactic may have led to some tactics being a bit too conservative: For example, when performing induction over mutually inductive or indirect-recursive datatypes, the built-in induction principle is weaker than it could be, omitting induction hypotheses except for directly-recursive arguments.
+
+Another tool that was partly inspired by \textsc{Sparkle} is the Haskell Equational Reasoning Assistant (HERA) \cite{Gill06HERA}. This tool provides a user-interface similar to \textsc{Sparkle}, where users can select subterms and apply a variety of rewriting-based tactics. In terms of proof capabilities, it is much more limited than \textsc{Sparkle} or LCF, since it supports only rewriting and not induction. It is not implemented in the LCF style, but HERA does record all of the equations used to rewrite a program, making it possible (in principle) to replay or check a HERA proof in another tool.
+
+%\paragraph{Static analysis tools.}
+
+%\paragraph{Type systems and type checking}
+%[Paragraph about type systems and type inference/checking. Type checking algorithms are the ultimate in automation, with no user input necessary---with Hindley-Milner type systems as found in ML and other languages, even the types themselves can be inferred automatically.
+
+%Type checking (absence of certain run-time faults)
+%\cite{Milner78} Milner's type system (the same used for ML and other functional languages). A program is said to ``go wrong'' if it ever tries to evaluate an application \hs{f x} where \hs{f} is not a function, or if it tries to do a case analysis on \hs{y} where \hs{y} is not a valid data constructor. Milner proved that ``well-typed programs never go wrong.'' Milner's type system is completely automatic: Most-general types can be determined by a type inference algorithm.
+
+%Fancier type systems can prove stronger properties, at the expense of some automation. First, polymorphic types: Checking that a Haskell program has a polymorphic type proves more than just the absence of run-time errors: It also establishes some non-trivial ``free theorems'' \cite{Wadler89Free}, based on a property of Haskell called \emph{parametricity}. Essentially, parametricity means that polymorphic functions must treat their arguments in an abstract way that is uniform for all type instances. For example, a list-transforming function with the polymorphic type \hs{$\forall$a. [a] -> [a]} can reorder or repeat the elements of the list, but it is not able to analyze any of the elements. Haskell's parametricity implies that the type \hs{$\forall$a. a -> a} is very limited: A function of this type, if it terminates, must simply return its argument unchanged. (Citation for free theorems with seq: \cite{JV04})
+
+%Rank-2 polymorphism: foldr/build fusion \cite{ShortCut93} \hs{build g = g (:) []} It has a rank-2 polymorphic type \hs{build :: $\forall$a. ($\forall$b. (a -> b -> b) -> b -> b) -> [a]}. The free theorem for this type justifies the foldr/build fusion rule: \hs{foldr k z (build g) = g k z}.
+
+%-- runST / parametricity properties
+
+%Extended Static Checking for Haskell \cite{Xu06}. What it is: ESC/Haskell is a static analysis tool for Haskell programs, which aims to prove the absence of certain run-time errors. The tool relies on annotations of the Haskell code with pre- and post-conditions, which are themselves coded as Haskell expressions. The ESC/Haskell is... Expressiveness: ESC/Haskell
+
+%Catch: Checking for pattern completeness (absence of pattern match failure) \cite{Mitchell2008}. This is a completely automatic tool that takes a Haskell program as input, and attempts to prove the absence of run-time pattern match failure. Very high automation (no user interaction at all), but limited expressiveness: No properties other than absence of pattern match failure can be proven.
+
+\section{Conclusion}
+\label{sec:case-conclusion}
+
+%In this final section, we will look back at the work done, consider some of the lessons learned, and comment on the successes and limitations of the work as a whole.
+
+The research effort of developing HOLCF can be divided roughly into three areas of work: 1) formalizing domain theory and proving libraries of theorems; 2) designing proof heuristics and automation, configuring the simplifier and other tactics; and 3) implementing definition packages.
+%\begin{itemize*}
+%\item Formalizing domain theory
+%\item Proof heuristics and automation
+%\item Implementing definition packages
+%\end{itemize*}
+%
+All three items are tightly interdependent, of course. Choices about which domain-theoretic concepts to formalize are constrained by the requirements of the definition packages, and also influenced by the desire for better automation. Definition packages must generate theorems that implement proof automation for users; conversely, the definition packages are also users of proof automation themselves, while they are performing internal proofs.
+
+In terms of choosing which domain-theoretic concepts to formalize in HOLCF, the primary lesson learned is the importance of keeping things small: To get a high level of proof automation, it is necessary to have library lemmas relating all possible combinations of core concepts. Formalizing all the definitions contained in a typical domain theory textbook would have been a disaster, because without an astronomical number of lemmas, there would necessarily be gaps in the theorem library, causing automation to suffer.
+
+One concept that did \emph{not} make it into \HOLCF{11} was continuity on a set. Some functions in HOLCF are continuous only on a subset of their domains, e.g. \isa{Abs} functions generated by type definitions with \textsc{Cpodef}. One possible design choice would have been to introduce, alongside the ordinary \isa{cont}, a new notion of continuity on a set. The problem is that then every new function with a continuity rule also needs a separate rule for set-restricted continuity. This increases the size of the theory library, and also adds work for the definition packages, which must generate new lemmas of this kind. So instead of formalizing a new variation of continuity, we express continuity on a set in terms of ordinary continuity of composed functions (see e.g.\ lemma \isa{typedef_cont_Abs} in Sec.~\ref{sec:holcf-cpodef}). Overall, HOLCF seems to be better off without this extra variant of continuity.
+
+One concept that \emph{was} added to \HOLCF{11} is compactness: In terms of admissibility proofs, compactness brought significant improvements in proof automation. But what was the full cost of integrating this new notion into HOLCF? Many new theorems had to be added to the library, relating compactness to admissibility, chain-finite types, type definitions, and various data constructor functions. Luckily compactness does not have notable interactions with very many other concepts, so the number of new theorems needed was not too large. In addition to the library lemmas, it was also necessary to have the \textsc{Cpodef} and \textsc{Domain} packages generate compactness lemmas for each newly-defined type. Fortunately the library lemmas about compactness made these new theorems relatively easy to produce, without requiring too much implementation code. Overall, considering the implementation effort versus the benefits, adding compactness can be considered a worthwhile improvement for \HOLCF{11}.
+
+Perhaps the most important and far-reaching design decision in \HOLCF{11} was the selection of the $\omega$-bifinites as the preferred category of domains. We are fortunate to have found such a category that allows so many components to work well together: the powerdomain library, ideal completion, the universal domain, algebraic deflations, and the \textsc{Domain} package. Domain theory researchers---including Scott, Plotkin, and Gunter among others---have explored a variety of different categories of domains in recent decades \cite{plotkin76powerdomain, gunter90semantic, abramsky94domain, Scott08}. One of the primary motivations for this line of research is to identify categories that are suitable for modeling recursive datatypes and programs. So in some sense, the implementation of \HOLCF{11} and the \textsc{Domain} package using the category of $\omega$-bifinite domains is a realization of this research goal: By demonstrating a completely implemented, formal, executable model of recursive datatypes, we validate the $\omega$-bifinite domains as a suitable category of domains for reasoning about computation.
+
+As a final conclusion, we review some high-level characteristics of \HOLCF{11} and what it is best used for. \HOLCF{11} is not the only possible choice for doing interactive proofs about functional programs; indeed, in some situations other systems might be preferable. For example, for verification of programs that only manipulate finite values and terminate on all inputs, higher-order logic is probably a better choice---although HOLCF can certainly reason about terminating programs, the bottoms and partial values tend to get in the way. But in other situations, the unique properties of \HOLCF{11} make it the best system available.
+
+For reasoning about programs whose termination is difficult to establish, the support for general recursion in HOLCF is particularly valuable. Other programs require HOLCF due to their use of datatypes: Recursive definitions involving powersets or the full function space are not allowed in HOL or other logics of total functions; yet recursive datatypes involving powerdomains or the continuous function space are easy to define in \HOLCF{11}. While HOL might work well for self-contained programs whose inputs are known to be total and finite, \HOLCF{11} is much more useful for verifying open-ended libraries that might be used with arbitrary inputs, finite or infinite, partial or total. In this situation, it is good to know that \HOLCF{11} models the source programs and datatypes very accurately: Datatypes include all the same partial and infinite values, and programs satisfy all the same laziness/strictness properties in \HOLCF{11} as they do in Haskell.
+
+When used for the kind of functional program verification it was designed for, \HOLCF{11} is an effective and useful tool. First, the system makes it easy to translate a variety of functional programs into the formalism of the logic. \HOLCF{11} then helps to make proofs about those programs as easy as possible: Using a combination of lemmas from libraries together with automatically-generated theorems, the proof automation in \HOLCF{11} helps to discharge easy subgoals, letting users focus their attention on only the most challenging and interesting parts of proofs. Finally, the definitional implementation of \HOLCF{11} means that users have a good reason to trust that their proofs are correct.

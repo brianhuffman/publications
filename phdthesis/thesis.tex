@@ -1,0 +1,304 @@
+\documentclass[letterpaper,12pt]{report}
+\usepackage{psu-thesis}
+\usepackage{hyperref}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{stmaryrd}
+\usepackage{url}
+\usepackage{tikz}
+\usepackage{mathpartir}
+\usepackage{haskell}
+\usepackage{listings}
+\usepackage{alltt}
+\usepackage{fancyvrb}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{caption, subcaption}
+\usepackage{mdwlist} % for compact list environments enumerate*, itemize*
+\usepackage[split]{splitidx}
+
+% No outline boxes for links
+\hypersetup{colorlinks, citecolor=black, filecolor=black, linkcolor=black, urlcolor=black}
+
+% pdf info
+\hypersetup{
+  pdftitle = {HOLCF '11: A Definitional Domain Theory for Verifying Functional Programs},
+  pdfsubject = {PhD dissertation, Portland State University},
+  pdfauthor = {Brian Charles Huffman},
+  pdfkeywords = {theorem proving, domain theory, functional language, denotational semantics, verification}
+}
+
+% Index of lemmas
+\makeindex
+\newindex[Index of Isabelle definitions]{def}
+\newindex[Index of Isabelle theorems]{thm}
+\newcommand{\indexdef}[1]{\sindex[def]{\isa{#1}}}
+\newcommand{\indexthm}[1]{\sindex[thm]{\isa{#1}}}
+% For index entries of entities not in HOLCF
+\newcommand{\indexdefx}[1]{\sindex[def]{\isa{#1}*}}
+\newcommand{\indexthmx}[1]{\sindex[thm]{\isa{#1}*}}
+
+% Use chapter heading for indexes (adapted from report.cls)
+% replaced makeschapterhead with makechapterhead
+\makeatletter
+\renewenvironment{theindex}
+               {\if@twocolumn
+                  \@restonecolfalse
+                \else
+                  \@restonecoltrue
+                \fi
+                \twocolumn[\@makechapterhead{\indexname} Note: Entries marked with an asterisk (*) are specific to this document; all other entries can also be found in the Isabelle/HOLCF 2011 sources.\bigskip]%
+                \@mkboth{\MakeUppercase\indexname}%
+                        {\MakeUppercase\indexname}%
+                \thispagestyle{plain}\parindent\z@
+                \parskip\z@ \@plus .3\p@\relax
+                \columnseprule \z@
+                \columnsep 35\p@
+                \let\item\@idxitem}
+               {\if@restonecol\onecolumn\else\clearpage\fi}
+\makeatother
+
+% Print a horizontal rule between each figure float and text
+\newcommand{\topfigrule}{\vspace*{8pt}\hrule\vspace*{-8.4pt}}
+\newcommand{\botfigrule}{\vspace*{-8pt}\hrule\vspace*{8.4pt}}
+
+% Allow larger floats combined with smaller amount of text
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\textfraction}{0.1}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\newcommand{\defeq}{\overset{\textrm{\tiny{def}}}{=}}
+
+%\newenvironment{proof}[1][Proof]{\begin{trivlist}
+%\item[\hskip \labelsep {\bfseries #1}]}{\end{trivlist}}
+\newenvironment{definition}[1][Definition]{\begin{trivlist}
+\item[\hskip \labelsep {\bfseries #1}]}{\end{trivlist}}
+
+% \texths{foo} works for single identifiers, but screws up spaces.
+\newcommand{\texths}[1]{\<#1\>}
+
+\newenvironment{lyxcode}
+  {\par\begin{list}{}{
+    \setlength{\rightmargin}{\leftmargin}
+    \setlength{\listparindent}{0pt}% needed for AMS classes
+    \raggedright
+    \setlength{\itemsep}{0pt}
+    \setlength{\parsep}{0pt}
+    \normalfont\ttfamily}%
+   \def\{{\char`\{}
+   \def\}{\char`\}}
+   \def\textasciitilde{\char`\~}
+   \item[]}
+  {\end{list}}
+
+% So we can turn on showspaces=true
+\renewcommand{\textvisiblespace}{\ }
+
+% Pretty printing for Isabelle syntax
+\lstdefinelanguage{Isabelle}{%
+  morekeywords={abbreviation,and,apply,assumes,axioms,begin,by,class,consts,cpodef,datatype,defines,definition,domain,domaindef,done,end,fixes,fixrec,from,fun,have,imports,in,infix,instance,instantiation,interpretation,lazy,lemma,locale,next,obtains,open,pcpodef,primrec,proof,qed,show,shows,theorem,theory,thus,typedef,types,unchecked,unfolding,using,where},
+  sensitive=true,
+  morecomment=[s]{(*}{*)},
+  columns=fullflexible,
+  basicstyle=\sffamily,
+  showspaces=true,
+  literate=
+    {_}{{$\mathunderscore$}}1
+    {`}{{$\cdot$}}1
+    {&}{{$\wedge$}}1
+    {~}{{$\neg$}}1
+    {~~}{{$\sim$}}1
+    {\%}{{$\lambda$}}1
+    {!!}{{$\bigwedge$}}1
+    {-->}{{$\longrightarrow$}}1
+    {->}{{$\rightarrow$}}1
+    {=>}{{$\Rightarrow$}}1
+    {<<}{{$\sqsubseteq$}}1
+    {<<|}{{$<\!<\!\!|$}}1
+    {~=}{{$\neq$}}1
+    {/=}{{$\neq$}}1
+    {==}{{$\equiv$}}1
+    {==>}{{$\Longrightarrow$}}1
+    {<->}{{$\longleftrightarrow$}}1
+    {[|}{{$\llbracket$}}1
+    {|]}{{$\rrbracket$}}1
+    {ALL}{{$\forall$}}1
+    {UU}{{$\bot$}}1
+    {++}{{$\oplus$}}1
+    {**}{{$\otimes$}}1
+    {\\<And>}{{$\bigwedge$}}1
+    {\\<Lambda>}{{$\Lambda$}}1
+    {\\<Longrightarrow>}{{$\Longrightarrow$}}1
+    {\\<Rightarrow>}{{$\Rightarrow$}}1
+    {\\<Squnion>}{{$\bigsqcup$}}1
+    {\\<Turnstile>}{{$\models$}}1
+    {\\<U>}{{$\mathcal{U}$}}1
+    {\\<Union>}{{$\bigcup$}}1
+    {\\<and>}{{$\wedge$}}1
+    {\\<bigcirc>}{{$\bigcirc$}}1
+    {\\<bottom>}{{$\bot$}}1
+    {\\<case>}{{case}}1
+    {\\<cdot>}{{$\cdot$}}1
+    {\\<cong>}{{$\cong$}}1
+    {\\<curlyvee>}{{$\curlyvee$}}1
+    {\\<curlywedge>}{{$\curlywedge$}}1
+    {\\<diamond>}{{$\diamond$}}1
+    {\\<equiv>}{{$\equiv$}}1
+    {\\<exists>}{{$\exists$}}1
+    {\\<fatbar>}{{$+\!\!+\!\!+$}}1
+    {\\<flat>}{{${}^{\flat}$}}1
+    {\\<forall>}{{$\forall$}}1
+    {\\<in>}{{$\in$}}1
+    {\\<lambda>}{{$\lambda$}}1
+    {\\<lbrakk>}{{$\llbracket$}}1
+    {\\<le>}{{$\le$}}1
+    {\\<^sub>\\<bottom>}{{${}_{\bot}$}}1
+    {\\<lifted>}{{${}_{\bot}$}}1
+    {\\<longleftrightarrow>}{{$\longleftrightarrow$}}1
+    {\\<longrightarrow>}{{$\longrightarrow$}}1
+    {\\<natural>}{{${}^{\natural}$}}1
+    {\\<not>}{{$\neg$}}1
+    {\\<noteq>}{{$\neq$}}1
+    {\\<notsqsubseteq>}{{$\not\sqsubseteq$}}1
+    {\\<oplus>}{{$\oplus$}}1
+    {\\<or>}{{$\vee$}}1
+    {\\<otimes>}{{$\otimes$}}1
+    {\\<preceq>}{{$\preceq$}}1
+    {\\<rbrakk>}{{$\rrbracket$}}1
+    {\\<rightarrow>}{{$\rightarrow$}}1
+    {\\<sharp>}{{${}^{\sharp}$}}1
+    {\\<sim>}{{$\sim$}}1
+    {\\<sqsubseteq>}{{$\sqsubseteq$}}1
+    {\\<subseteq>}{{$\subseteq$}}1
+    {\\<times>}{{$\times$}}1
+    {\\<top>}{{$\top$}}1
+    {\\<union>}{{$\cup$}}1
+    {\\<lbrace>}{{\{}}1
+    {\\<rbrace>}{{\}}}1
+    {\\<^sub>\\<bottom>}{{${}_{\bot}$}}1
+    {"fun"}{{fun}}1
+    {"domain"}{{domain}}1
+    {domainn}{{domain}}1
+    {_apply}{{$\mathunderscore$apply}}1
+    {_case}{{$\mathunderscore$case}}1
+    {_class}{{$\mathunderscore$class}}1
+    {_datatype}{{$\mathunderscore$datatype}}1
+    {_definition}{{$\mathunderscore$definition}}1
+    {_fixes}{{$\mathunderscore$fixes}}1
+    {_fun}{{$\mathunderscore$fun}}1
+    {_in}{{$\mathunderscore$in}}1
+    {_lemma}{{$\mathunderscore$lemma}}1
+    {_theorem}{{$\mathunderscore$theorem}}1
+    {::domain}{{::domain}}1
+    {CASE}{{\textbf{case}}}1
+    {domain_}{{domain$\mathunderscore$}}1
+    {domain_class}{{domain$\mathunderscore$class}}1
+    {fixrec_}{{fixrec$\mathunderscore$}}1
+    {from_}{{from$\mathunderscore$}}1
+    {fun_}{{fun$\mathunderscore$}}1
+    {type_synonym}{{\textbf{type$\mathunderscore$synonym}}}1
+    {typedef_}{{typedef$\mathunderscore$}}1
+    {typedef_domain}{{typedef$\mathunderscore$domain}}1
+}
+\lstnewenvironment{isabelle}{\lstset{language=Isabelle}}{}
+\lstnewenvironment{isacode}{\singlespace\lstset{language=Isabelle, xleftmargin=\parindent}}{\endsinglespace}
+\lstnewenvironment{isacodes}{\lstset{language=Isabelle, xleftmargin=\parindent}}{}
+\lstset{language=Isabelle}
+\newcommand{\isa}{\lstinline}
+
+% for use between adjacent isacode environments
+\newcommand{\unmedskip}{\vspace{-7pt}}
+
+\newenvironment{code}{\begin{alltt}}{\end{alltt}}
+\newenvironment{codesingle}{\def\baselinestretch{1.1}\begin{alltt}}{\end{alltt}}
+% use 5pt fudge-factor to cancel problems with baselinestretch
+\DefineVerbatimEnvironment{hscode}{Verbatim}{baselinestretch=1.1, samepage=true, xleftmargin=\parindent, formatcom=\vspace{5pt}}
+\newcommand{\hs}[1]{\text{\tt\frenchspacing#1}}
+
+\hsmargin0pt
+
+\newcommand{\fixrec}{\textsc{Fixrec}}
+\newcommand{\domain}{\textsc{Domain}}
+\newcommand{\pcpodef}{\textsc{Pcpodef}}
+\newcommand{\recdef}{\textsc{Recdef}}
+\newcommand{\HOLCF}[1]{HOLCF '#1}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+\title{\HOLCF{11}: A Definitional Domain Theory for Verifying Functional Programs}
+%\title{How to Write Theses \\ With Two Line Titles}
+%\titleline{How to Write Theses With Two Line Titles}
+\author{Brian Charles Huffman}
+\principaladviser{James Hook}{\ }
+\firstreader{John Matthews}
+\secondreader{Mark Jones}
+\thirdreader{Tim Sheard}
+\graduaterepresentative{Gerardo Lafferriere}
+%\departmenthead{Aragorn}
+\grantdate{July}{13}{2011}
+\copyrightyear{2012}
+
+\tablespagefalse % No tables used
+
+\pdfbookmark[0]{Title}{title} % Sets a PDF bookmark for the title page
+
+\titlep
+
+% Creative Commons License page
+\cleardoublepage
+\begin{center}
+\begin{minipage}{0.75\linewidth}
+This work is licensed under the Creative Commons Attribution 3.0 Unported License. To view a copy of this license, visit \url{http://creativecommons.org/licenses/by/3.0/} or send a letter to Creative Commons, 444 Castro Street, Suite 900, Mountain View, California, 94041, USA.
+\end{minipage}
+\end{center}
+
+\prefatory
+
+\prefacesection{Abstract}
+
+HOLCF is an interactive theorem proving system that uses the mathematics of domain theory to reason about programs written in functional programming languages. This thesis introduces \HOLCF{11}, a thoroughly revised and extended version of HOLCF that advances the state of the art in program verification: \HOLCF{11} can reason about many program definitions that are beyond the scope of other formal proof tools, while providing a high degree of proof automation. The soundness of the system is ensured by adhering to a definitional approach: New constants and types are defined in terms of previous concepts, without introducing new axioms.
+
+Major features of \HOLCF{11} include two high-level definition packages: the \textsc{Fixrec} package for defining recursive functions, and the \textsc{Domain} package for defining recursive datatypes. Each of these uses the domain-theoretic concept of least fixed points to translate user-supplied recursive specifications into safe low-level definitions. Together, these tools make it easy for users to translate a wide variety of functional programs into the formalism of HOLCF. Theorems generated by the tools also make it easy for users to reason about their programs, with a very high level of confidence in the soundness of the results.
+
+As a case study, we present a fully mechanized verification of a model of concurrency based on powerdomains. The formalization depends on many features unique to \HOLCF{11}, and is the first verification of such a model in a formal proof tool.
+
+%\prefacesection{Dedication} I dedicate this thesis to...
+\prefacesection{Acknowledgments} I would like to thank my advisor, John Matthews, for having continued to devote so much time to working with me, even as a part-time professor; and for motivating me to keep studying domain theory (and enjoying it!) these past years.
+
+\afterpreface
+
+\body
+
+\include{intro}
+\include{holcf}
+\include{fixrec}
+\include{domain}
+\include{powerdomain}
+\include{universal}
+\include{case-domain}
+
+\singlespace
+
+\bibliographystyle{alpha}
+\bibliography{thesis}
+
+\appendix
+\cleardoublepage
+\stepcounter{chapter}
+\phantomsection
+\addcontentsline{toc}{chapter}{Appendix {\thechapter}: Index of Isabelle Definitions}
+\printindex[def]
+
+\cleardoublepage
+\stepcounter{chapter}
+\phantomsection
+\addcontentsline{toc}{chapter}{Appendix {\thechapter}: Index of Isabelle Theorems}
+\printindex[thm]
+
+\end{document}

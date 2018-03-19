@@ -1,0 +1,421 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+This is a thesis about program verification---how to make sure that your computer programs do exactly what they are supposed to do. In other words, our goal is to be able to specify a computer program, state properties about it, and then construct proofs of those properties.
+
+To approach this problem, we must start by deciding how to specify our computer programs; that is, we must choose a programming language. For reasons described below, this dissertation focuses on a common subset of a family of languages known as \emph{pure functional programming languages}.
+
+%Program verification is a large field, however, so it will be necessary to narrow the focus a bit. This thesis concentrates specifically on a certain kind of program (those written in a pure functional programming language), and a certain style of verification (interactive theorem proving).
+
+What is a pure functional programming language? Most programming languages include some notion of ``functions'', although what that means can vary significantly from one programming language to another. Generally a ``function'' is a piece of code that takes some number of \emph{arguments} as input, and then computes a \emph{result} that is passed back to the code that called it. How well this coincides with the mathematical definition of ``function'' depends on the programming language.
+
+Many commonly-used programming languages, including C and Java, are \emph{imperative} languages. Functions in imperative languages consist of sequences of \emph{statements}, which are the basic building blocks of algorithms. A simple statement might involve evaluating a mathematical expression that depends on the function arguments. Other statements might have effects beyond just computing a result: They might modify a value stored in memory, or get a character from user input or from a file. So if the same function is called twice with the same arguments, then it might return a different result each time---we would say that such a function is not \emph{pure}.
+
+%Focus on \emph{expressions} rather than statements.
+In contrast, pure functional programming languages like Haskell \cite{HaskellReport, Bird1998Introduction} have a focus on \emph{expressions}---which are evaluated without side-effects---rather than statements. In Haskell, all functions are pure: The result of a function depends only on the values of its arguments, and evaluating a function has no observable effect other than just computing the result value. In a pure functional programming language, it makes sense to think of functions as real functions in the mathematical sense: A mathematical relation between argument and result values is sufficient to specify the behavior of a Haskell function.
+
+Using a pure functional language makes a big difference when it comes to reasoning about equivalence of programs. In a C program, we might have a particular function call \texttt{add(3,5)} that returns the value \texttt{8}. Does this mean that the program expression ``\texttt{add(3,5)}'' is equivalent to the expression ``\texttt{8}''? Not necessarily---the function \texttt{add} might have other side-effects, such as writing to a global variable, printing output to the screen, or writing to a file. So replacing one expression with the other could change the meaning of the surrounding program---we would say that such a function call is not \emph{referentially transparent}. In contrast, every Haskell function call is referentially transparent: Replacing a function call with its return value always yields an equivalent Haskell program---just as in arithmetic, replacing an occurrence of $(3 + 5)$ with $8$ always yields an equivalent mathematical expression. 
+Thus we can reason about Haskell programs just as we might reason about mathematical formulas: Within a Haskell program, we are free to replace function calls with their values, unfold function definitions, or rewrite expressions using algebraic laws satisfied by the relevant functions.
+
+In the sense that they permit equational reasoning, pure functional languages like Haskell are the easiest to work with. But in another sense, the verification problem for Haskell is the most challenging verification problem of all, because it is the most general. Haskell-like languages have several core features that make them useful for embedding other languages, such as higher-order functions (i.e., functions that take other functions as arguments), algebraic datatypes, polymorphism, and recursion \cite{Hudak98}. Historically, many of these language features originate with the \textsc{Iswim} language, from Landin's seminal 1966 paper ``The Next 700 Programming Languages'' \cite{Landin66}. \textsc{Iswim} was designed specifically to be expressive enough to unify a large class of existing programming languages. The expressiveness of Haskell makes it a worthwhile language to study, because if you know how to reason about Haskell, then you know how to reason about many other languages as well.
+
+%The remainder of this chapter is organized as follows. Section~\ref{sec:intro-haskell} shows examples of informal reasoning with Haskell programs, and demonstrates why there is a need to formalize such reasoning in a proof assistant. Section~\ref{sec:intro-history} gives some of the historical background of interactive theorem proving, and highlights some of the trends over the last few decades in logics and the provers used to reason about them. Finally, once the historical context has been established, a thesis statement will be formulated in Section~\ref{sec:intro-thesis}.
+
+\section{Informal reasoning with Haskell}
+\label{sec:intro-haskell}
+
+%In this section we present a 
+
+\subsection{Haskell terms and types}
+
+Haskell \cite{HaskellReport, Bird1998Introduction} is a general-purpose programming language based on a typed lambda calculus. The full language includes many features (such as type classes) that will not be relevant for most of this dissertation. Accordingly, this section will focus on just a few basic features: functions, the type system, algebraic datatypes, and recursive definitions.
+
+As it is based on the lambda calculus, Haskell has syntax for function application, written ``\hs{f x}''; and function abstraction, written ``\hs{\textbackslash x -> t}''.\footnote{``\hs{\textbackslash}'' is Haskell's ASCII approximation of ``$\lambda$'', the usual symbol for function abstraction in the lambda calculus.} Function application associates to the left, so ``\hs{f x y}'' means ``\hs{(f x) y}''. In Haskell, functions with symbol names like ``\hs{(+)}'' use infix syntax, so that ``\hs{f x + y}'' means ``\hs{(+) (f x) y}''. Nested abstractions also have special syntax: ``\hs{\textbackslash x y -> t}'' is shorthand for ``\hs{\textbackslash x -> \textbackslash y -> t}''.
+
+As a typed language, every expression in a Haskell program belongs to a \emph{type}; we write \hs{x :: T} to assert that expression \hs{x} has type \hs{T}. Haskell types include base types like \hs{Integer}, function types like \hs{Integer -> Integer}, and datatypes like \hs{[Integer]} (read as ``list of integer''). (The function arrow is right-associative, so the two-argument function type \hs{A -> B -> C} really means \hs{A -> (B -> C)}, a function that returns a function.) Haskell also includes \emph{polymorphic} types like \hs{a -> a}, which mention type variables like ``\hs{a}'' (type variables are distinguished from other Haskell types by being in lower-case). A polymorphic type can be \emph{instantiated} by uniformly substituting types for type variables; for example, \hs{Integer -> Integer} is an instance of the polymorphic type \hs{a -> a}. Some examples of Haskell expressions with their types are shown in Figure~\ref{fig:haskell}.
+
+\begin{figure}
+\begin{hscode}
+                                  3 :: Integer
+                                (+) :: Integer -> Integer -> Integer
+                      (\x -> x + 3) :: Integer -> Integer
+                        (\f -> f 3) :: (Integer -> a) -> a
+                  (\f x -> f (f x)) :: (a -> a) -> a -> a
+                             [3, 5] :: [Integer]
+                     (\x -> [x, x]) :: a -> [a]
+                    (\xs -> 3 : xs) :: [Integer] -> [Integer]
+(\xs -> case xs of [] -> 3; y : ys -> 4) :: [a] -> Integer
+\end{hscode}
+\caption{Haskell expressions with types}
+\label{fig:haskell}
+\end{figure}
+
+Haskell programmers can define new types using \emph{datatype declarations}. For example, the standard Haskell library contains the declaration \hs{data Bool = False |} \hs{True}, which introduces a new type \hs{Bool}, with constructors \hs{False :: Bool} and \hs{True :: Bool}.
+
+A slightly more complicated example is the following binary tree datatype. Note that the type being defined also occurs on the right-hand side, making this a \emph{recursive} datatype.
+%
+\begin{hscode}
+data Tree = Leaf Integer | Node Tree Tree
+\end{hscode}
+%
+This introduces a new datatype \hs{Tree}, with constructor functions \hs{Leaf :: Integer} \hs{-> Tree} and \hs{Node :: Tree -> Tree -> Tree}. Inhabitants of type \hs{Tree} include expressions like \hs{Leaf 3} or \hs{Node (Leaf 2) (Node (Leaf 3) (Leaf 4))}.
+
+Datatypes may also have type parameters. Below is a variation of the \hs{Tree} datatype that is parameterized by the type of values contained in the leaves:
+%
+\begin{hscode}
+data Tree' a = Leaf' a | Node (Tree' a) (Tree' a)
+\end{hscode}
+%
+With this new \hs{Tree'} datatype, the constructor functions now have polymorphic types. This means we can use the same constructor functions to build different trees with elements of different types. For example, we have \hs{Leaf' 5 :: Tree' Integer} and \hs{Leaf' True :: Tree' Bool}.
+
+Haskell's list type is an ordinary datatype, but with some special syntax. It could be defined by the declaration \hs{data [a] = [] | a : [a]}. It has two polymorphic constructors, \hs{[] :: [a]} (called ``nil'') and \hs{(:) :: a -> [a] -> [a]} (called ``cons'', which is short for ``constructor''). Cons is written infix, and associates to the right. The list syntax ``\hs{[x, y, z]}'' stands for ``\hs{x : y : z : []}''. Using pluralized names like ``\hs{xs}'' or ``\hs{ys}'' for list variables is a common convention among Haskell programmers; this convention is also followed in this document.
+
+\subsection{Equational reasoning}
+
+The simplest kind of proofs about programs are done by equational reasoning: unfolding definitions, performing reduction steps---in general, just replacing equals by equals. Many properties about programs can be proven correct using equational reasoning alone. For example, by unfolding and refolding the definitions, we can show that the function composition operator \hs{(.)} is associative:
+
+\begin{hscode}
+(.) :: (b -> c) -> (a -> b) -> a -> c
+(f . g) x = f (g x)
+\end{hscode}
+
+\begin{theorem}
+For all \hs{f}, \hs{g}, \hs{h}, and \hs{x}, \hs{((f . g) . h) x = (f . (g . h)) x}.
+\end{theorem}
+
+\begin{proof}
+We proceed by equational reasoning, using the definition of \hs{(.)}.
+
+\medskip
+\begin{minipage}[b]{0.4\textwidth}
+\begin{hscode}
+((f . g) . h) x
+  = (f . g) (h x)
+  = f (g (h x))
+  = f ((g . h) x)
+  = (f . (g . h)) x
+\end{hscode}
+\end{minipage}
+\hfill
+\qedhere
+\end{proof}
+
+Properties proved by equational reasoning are easy to trust, because in a pure language like Haskell, replacing equals by equals is universally valid. There are no subtle side conditions or restrictions on when and where you are allowed to perform an equational rewriting step. This means that we can achieve a high level of assurance even for informal pencil-and-paper proofs by equational reasoning.
+%If all types of reasoning about functional programs were so straightforward, then there would not be much of a need for formal, computer-checked proofs.
+
+\subsection{Proofs by induction}
+
+Equational rewriting is not sufficient to prove all properties we might be interested in. Many properties, especially those related to recursive functions, also require the use of induction. For example, we can define a recursive function \hs{map} that applies the given function \hs{f} to every element of a list. Then we can prove that mapping the composition of two functions over a list is the same as mapping one, then mapping the other.
+
+\begin{hscode}
+map :: (a -> b) -> [a] -> [b]
+map f []       = []
+map f (x : xs) = (f x) : (map f xs)
+\end{hscode}
+
+\begin{theorem}
+\label{thm:map-compose}
+For any \hs{f}, \hs{g}, and \hs{xs}, \hs{map (f . g) xs = map f (map g xs)}.
+\end{theorem}
+%\begin{proof}
+\noindent
+We proceed by induction over \hs{xs}. For the base case, we show that the proposition holds for \hs{xs = []}, using the definition of \hs{map}:
+%
+\begin{hscode}
+map (f . g) [] = [] = map f [] = map f (map g [])
+\end{hscode}
+%
+For the induction step, we assume that the proposition holds for an arbitrary \hs{xs}, and then show that the proposition must also hold for \hs{x : xs}.
+%
+\begin{hscode}
+map (f . g) (x : xs)
+  = ((f . g) x) : (map (f . g) xs)   (Unfolding map)
+  = (f (g x)) : (map (f . g) xs)     (Unfolding (.))
+  = (f (g x)) : (map f (map g xs))   (Inductive hypothesis)
+  = map f ((g x) : (map g xs))       (Folding map)
+  = map f (map g (x : xs))           (Folding map)
+\end{hscode}
+%\end{proof}
+
+This may look like a thorough proof, and in some functional languages it would indeed be a valid proof. But in Haskell, there are some extra side conditions that we must check, due to a certain language feature of Haskell---\emph{laziness}. Lazy functional programming languages are pure functional languages that implement a particular evaluation order. Arguments to functions are not necessarily evaluated before a function is called; instead, the evaluation of each argument is deferred until the point where its value is actually needed. (Conversely, \emph{strict} functional languages evaluate arguments before every function call.) In a lazy language, we must consider non-termination in more contexts than we would in a strict language.
+
+\subsection{Bottoms and partial values}
+
+The presence of laziness and non-termination makes reasoning a bit more complicated. In particular, we will need to extend our induction rule for Haskell lists to explicitly consider non-termination.
+
+\begin{equation}
+\inferrule
+{ P(\hs{[]}) \\ \forall\,\hs{x}\;\hs{xs}.\;P(\hs{xs}) \longrightarrow P(\hs{x : xs}) \\ \ldots? }
+{ \forall\,\hs{xs}.\;P(\hs{xs}) }
+\end{equation}
+
+To illustrate this, we will consider a property of a function that reverses the elements of a list. The implementation of \hs{rev} also uses a helper function \hs{snoc} (``cons'' spelled backwards) which adds a single element to the \emph{end} of a list.
+
+\begin{hscode}
+rev :: [a] -> [a]
+rev []       = []
+rev (x : xs) = snoc (rev xs) x
+
+snoc :: [a] -> a -> [a]
+snoc []       y = y : []
+snoc (x : xs) y = x : snoc xs y
+\end{hscode}
+
+We might like to prove, for example, that reversing a list twice will give back the original list. Since \hs{rev} is defined in terms of \hs{snoc}, we might start by attempting to prove the following proposition as a lemma:
+
+\begin{proposition}
+For all \hs{xs} and \hs{y}, \hs{rev (snoc xs y) = y : rev xs}.
+\end{proposition}
+
+\noindent
+We proceed by induction over \hs{xs}. For the base case, it is straightforward to show that the proposition holds for \hs{xs = []} (both sides evaluate to \hs{[y]}). The \hs{x : xs} case also goes through just fine. However, the property does not hold in general in Haskell, because it does not hold in the case where the evaluation of \hs{xs} fails to terminate.
+
+We say that a Haskell expression is \emph{undefined} if its evaluation leads to non-termination. Any undefined Haskell expression can be treated as equivalent to the canonical Haskell function \hs{undefined}, which goes into an infinite loop if we ever try to evaluate it. In mathematical notation, the value denoted by \hs{undefined} is written $\bot$ (pronounced ``bottom'').
+
+\begin{hscode}
+undefined :: a
+undefined = undefined
+\end{hscode}
+
+To cover the possibility of non-termination, we can add a third case to our inductive proof of Theorem~\ref{thm:map-compose}, where \hs{xs = undefined}. The proof of this case relies on the fact that \hs{map} is strict in its second argument, i.e.\ \hs{map f undefined =} \hs{undefined}. This follows from the fact that evaluating \hs{map f xs} immediately requires \hs{xs} to be evaluated.
+
+\begin{hscode}
+map (f . g) undefined
+  = undefined
+  = map f undefined
+  = map f (map g undefined)
+\end{hscode}
+
+Even after proving the undefined case, we are still not quite done with the proof. There is another, more subtle ``admissibility'' condition we must verify.
+
+\subsection{Infinite values and admissibility conditions}
+
+In addition to undefined values, laziness also introduces the possibility of infinite values. For example, in Haskell we can define an infinite list of booleans:
+%
+\begin{hscode}
+trues :: [Bool]
+trues = True : trues
+\end{hscode}
+%
+In a strict functional language, this definition would yield \hs{trues = undefined}. However, since the constructor function \hs{(:)} is not strict in Haskell, the circular definition of \hs{trues} is only evaluated as far as required by other functions that examine the list---it does not immediately go into an infinite loop. (Of course, other functions taking \hs{trues} as input might still loop, for example if they try to find the end of the list!)
+
+The presence of infinite lists means that our induction principle for lists will need another side condition. We can demonstrate this need by considering an erroneous proof by induction.
+%
+\begin{hscode}
+take :: Integer -> [a] -> [a]
+take n []       = []
+take n (x : xs) = if n > 0 then take (n - 1) xs else []
+\end{hscode}
+%
+Using \hs{take} we can define a finiteness predicate for lists, where \hs{xs} is finite if there exists an integer \hs{n} such that \hs{xs = take n xs}. Now we can write down an inductive ``proof'' that all lists are finite: All three cases (\hs{undefined}, \hs{[]}, and \hs{x : xs}) are provable. However, the list \hs{trues} does not satisfy the finiteness property; where did the proof go wrong?
+
+It turns out that in lazy functional languages like Haskell, where datatypes may contain infinite values, the induction scheme for lists is only valid for the so-called ``admissible'' predicates. The map-compose property in Theorem~\ref{thm:map-compose} is admissible, while the finiteness predicate is not. (The definition and properties of admissibility will be covered in depth in Chapter~\ref{ch:holcf}.)
+
+Already, we have noticed that proofs involving induction are much more subtle and error-prone than proofs using only equational reasoning. And these are not complicated examples---lists are a simple recursive datatype, and \hs{map} and \hs{(.)} have short definitions. As we move toward larger, more complex definitions that use more interesting forms of recursion, it becomes apparent that pencil-and-paper proofs will no longer be sufficient. To get a reasonable level of confidence, we will need completely formal, machine-checked proofs.
+
+\section{A preview of formal reasoning with \HOLCF{11}}
+
+Traditionally, most mathematics is done with \emph{informal} reasoning: People write proofs, which are checked by having other people read and understand them. Many details may be omitted, as long as enough are included to convey an understanding of the proof. In contrast, \emph{formal} proofs are completely rigorous, and omit nothing. Checking a formal proof does not rely on understanding; rather, it consists of mindlessly checking that every logical inference in the proof is valid. Working with formal proofs by hand is generally impractical; however, computers are perfectly suited to the repetitive tasks of constructing and checking formal proofs.
+
+\HOLCF{11} (usually pronounced ``hol-cee-eff'') is a system for doing formal reasoning about functional programs. It is implemented as an extension of Isabelle \cite{isabelle-tutorial}, which is a generic interactive theorem prover, or \emph{proof assistant}. A proof assistant is a piece of software that lets users state definitions and theorems (expressed in a suitable logical formalism) and create formal proofs. The proof assistant facilitates this task by checking logical inferences, keeping track of assumptions and proof obligations, and automating easy or repetitive subproofs.
+
+Users interact with \HOLCF{11} by composing and stepping through a \emph{theory file}. Figure \ref{fig:intro-lazy-list-thy} shows an example theory file with a formalized version of the map-compose theorem from the previous section. The file starts with a theory name and an \isa{imports} declaration specifying the standard HOLCF theory library. \HOLCF{11} provides commands that simulate Haskell-style definitions: \isa{domain} for recursive datatypes and \isa{fixrec} for recursive functions. Users state theorems with the \isa{lemma} command, and prove them by writing proof scripts consisting of one or more \emph{proof tactics}. Isabelle lets users step individually through each \isa{apply} command in a proof script, displaying in a separate output window the remaining subgoals that still need to be proved. When all subgoals have been discharged, Isabelle prints the message, ``No subgoals!'' At this point the \isa{done} command completes the proof.
+
+\HOLCF{11} provides automation so that users can prove many theorems in just one or two steps. In the informal proof of the previous section, the strictness of \hs{map} was established by an appeal to intuition about evaluation order; in \HOLCF{11} the corresponding lemma \isa{map_strict} is rigorously proved in one step with the help of the \isa{fixrec_simp} tactic (documented in Chapter~\ref{ch:fixrec}). The informal inductive proof of the map-compose property required a moderate amount of equational reasoning, but the automation in \HOLCF{11} lets us prove it in just two steps: First, the \isa{induct xs} tactic applies the induction rule for the lazy list type, yielding separate subgoals for \isa{Nil}, \isa{Cons}, \isa{\<bottom>}, and the admissibility check. The \isa{simp_all} tactic then uses Isabelle's simplifier to discharge all remaining subgoals by equational rewriting. Because it is declared with the \isa{[simp]} attribute, the simplifier uses the previous lemma \isa{map_strict} as a rewrite rule in this proof.
+
+In summary, we can see that using \HOLCF{11} has some advantages over informal reasoning. First, note that \HOLCF{11} is sufficiently expressive to reason about functional programs: Users can directly specify functional programs and theorems about them, using a notation that is similar to a Haskell-like functional programming language. Second, \HOLCF{11} has automation: With its proof tactics, users can write concise proof scripts without having to devote attention to routine proof details. Finally, \HOLCF{11} provides confidence: It is built within a completely formal and rigorous theorem proving system, preventing errors and guaranteeing the soundness of the results.
+
+%Interactive theorem proving may be contrasted with various styles of fully-automatic proving. With an automatic theorem prover, the user supplies a proposition to check; the program then attempts to either prove or disprove it, using a decision procedure. Fully-automatic theorem proving gains automation at the expense of expressiveness: Automatic provers can only deal with propositions expressed in certain decidable theories, such as linear arithmetic or satisfiability of boolean formulas. On the other hand, interactive proof assistants require user guidance to build proofs, but users are free to reason about any properties expressible in the language of mathematics and logic.
+
+%This thesis describes \HOLCF{11}, a collection of libraries and tools for the Isabelle proof assistant \cite{isabelle-tutorial} that is designed to facilitate formal reasoning about programs written in pure functional programming languages. \HOLCF{11} (usually pronounced ``hol-cee-eff'') represents the latest developments in a line of work spanning decades: It grew out of earlier versions of the Isabelle/HOLCF system developed in the 1990s \cite{regensburger95holcf, hol+lcf}, which in turn derived from LCF, the seminal proof assistant developed throughout the 1970s and 1980s \cite{GMW79, paulson87lcf}.
+
+%HOLCF is an interactive theorem proving system that uses the mathematics of domain theory to reason about programs written in functional programming languages. This thesis introduces \HOLCF{11}, a thoroughly revised and extended version of HOLCF that advances the state of the art in program verification: Compared to other formal proof tools, \HOLCF{11} can reason about a larger class of program definitions, while providing a higher degree of proof automation. The soundness of the system is ensured by adhering to a definitional approach: New constants and types are defined in terms of previous concepts, without introducing new axioms.
+
+%TODO: talk about how this proof is done in HOLCF
+%[Fig.~\ref{fig:intro-lazy-list-thy} shows how this proof is formalized in HOLCF.]
+
+
+\begin{figure}
+\begin{isacode}
+theory LazyList imports HOLCF begin
+
+  domain 'a List = Nil | Cons (lazy "'a") (lazy "'a List")
+
+  fixrec map :: "('a \<rightarrow> 'b) \<rightarrow> 'a List \<rightarrow> 'b List"
+    where "map\<cdot>f\<cdot>Nil = Nil"
+    | "map\<cdot>f\<cdot>(Cons\<cdot>x\<cdot>xs) = Cons\<cdot>(f\<cdot>x)\<cdot>(map\<cdot>f\<cdot>xs)"
+
+  lemma map_strict [simp]: "map\<cdot>f\<cdot>\<bottom> = \<bottom>"
+    apply fixrec_simp
+    done
+
+  lemma map_map: "map\<cdot>f\<cdot>(map\<cdot>g\<cdot>xs) = map\<cdot>(\<Lambda> x. f\<cdot>(g\<cdot>x))\<cdot>xs"
+    apply (induct xs)
+    apply simp_all
+    done
+
+end
+\end{isacode}
+\caption{A \HOLCF{11} theory file containing a formalization of lazy lists}
+\label{fig:intro-lazy-list-thy}
+\end{figure}
+
+\section{Historical background}
+\label{sec:intro-history}
+
+\HOLCF{11} represents the latest step in a long line of research, starting with the work of Dana Scott and Robin Milner in the late 1960s and early 70s. Their research program started with Scott's logic of computable functions (LCF), which formed the basis for Milner's original LCF theorem prover. Since the first version of the LCF system, there have been some notable long-term trends in interactive theorem proving: Proof assistants have gradually become more powerful and more automated; at the same time there has been a continued effort to minimize the amount of code and the number of axioms that must be trusted. For a more in-depth account, see the excellent historical overview by Mike Gordon \cite{Gordon2000}.
+
+\subsection{Logic of computable functions}
+
+The logic of computable functions was designed by Dana Scott in 1969 for reasoning about functional programs \cite{Scott1993lcf}. The logic comprises two syntactic classes of entities: \emph{terms} and \emph{formulae}. The language of terms is a typed lambda calculus, similar to Haskell---terms are built from variables, constants, lambda abstraction and function application. In addition to function types, LCF also has types $o$ and $\iota$ of truth values and numbers, corresponding to the Haskell types \hs{Bool} and \hs{Integer}. (It is straightforward to extend LCF with additional base types, if desired.) Constants in LCF include the truth values $\mathbf{T} : o$ and $\mathbf{F} : o$, a bottom value $\bot_\alpha : \alpha$ for every type $\alpha$, a conditional (if-then-else) operator $\mathbf{C}_\alpha : o \to \alpha \to \alpha \to \alpha$, and a fixed point combinator $\mathbf{Y}_\alpha : (\alpha \to \alpha) \to \alpha$ for expressing recursive functions.
+
+The language of LCF formulae includes connectives of first-order logic ($\wedge$, $\longrightarrow$, $\forall$), and also (in)equalities between terms, written $t \sqsubseteq u$ and $t = u$. The logical inference rules for LCF include the usual rules of first-order logic, plus a few axioms about inequalities: ($\sqsubseteq$) is reflexive, antisymmetric, transitive, has $\bot_\alpha$ as a minimal value, and also satisfies the following monotonicity property.
+%
+\begin{equation}
+\inferrule
+{ f \sqsubseteq g \\ x \sqsubseteq y }
+{ f(x) \sqsubseteq g(y) }
+\end{equation}
+%
+LCF also axiomatizes a rule for proofs by cases on type $o$, and defining equations for the conditional operator. For the fixed point operator applied to a function $f : \alpha \to \alpha$, LCF gives us an unfolding rule $f(\mathbf{Y}_\alpha(f)) = \mathbf{Y}_\alpha(f)$ and a fixed-point induction principle:
+%
+\begin{equation}
+\inferrule
+{ \Phi[\bot_\alpha] \\ \forall{x}.\ \Phi[x] \longrightarrow \Phi[f(x)] }
+{ \Phi[\mathbf{Y}_\alpha(f)] }
+\end{equation}
+%
+Fixed-point induction is valid for any formula $\Phi[x]$ that satisfies a syntactic admissibility test for the variable $x$.
+
+The axioms of LCF were not really invented, but rather discovered: The logic was designed with a particular model in mind, and the various LCF axioms came from properties that could be proven about the model \cite{Scott1993lcf}. The model of LCF is based on \emph{domain theory}, a field of mathematics also pioneered by Dana Scott \cite{gunter90semantic}. Each LCF type is modeled as a \emph{domain} (a kind of complete partial order) and LCF functions are modeled as continuous functions between domains. Domain theory also provides a least fixed-point combinator, used to model $\mathbf{Y}_\alpha$. Keep in mind, however, that while domain theory justifies the rules, it is not part of the formal system; LCF is really just a collection of abstract syntactic rules for manipulating formulae.
+
+\subsection{LCF style theorem provers}
+
+In the early 1970s, a few years after LCF was introduced, a proof assistant was developed for it by Robin Milner at Stanford; this first version was known as Stanford LCF. The prover implemented all the formal rules of the LCF logic, providing a programmable interface with which users could interactively prove theorems.
+
+A few years later while at Edinburgh, Milner created a new version called Edinburgh LCF \cite{GMW79}, which was the first proof assistant to be implemented in what became known as the ``LCF style''. In an LCF style prover, all the code for the logical inference rules is collected in a \emph{proof kernel}, which implements an abstract type \hs{thm} of theorems. For example, one of the kernel functions in Edinburgh LCF implements the modus ponens rule: Given a theorem $P \longrightarrow Q$ and a theorem $P'$, after checking that $P$ and $P'$ are the same formula, it creates a theorem $Q$. As an abstract type, the representation of a \hs{thm} is not visible to any code outside the kernel; only the kernel can create values of type \hs{thm}. Other code cannot forge theorems, but can only create them via the operations exported by the kernel.
+
+The LCF style requires an implementation language that enforces abstract types. Such languages were not commonplace in the 1970s: In order to build Edinburgh LCF, Milner simultaneously developed the functional language ML for this purpose \cite{GMW79}. ML eventually became a widely-used general purpose programming language, and influenced many later functional programming languages, including Haskell.
+
+In an LCF style theorem prover, users can freely extend the system by adding more code outside the kernel, without risking the soundness of the system. Even if the new user code contains bugs, the worst that can happen is that proofs relying on that code might fail; bugs in non-kernel code cannot be exploited to produce invalid theorems.
+
+The LCF architecture makes it possible to write proof assistants that include very large, sophisticated tools for constructing proofs, yet require only a small amount of trusted code. For example, all versions of LCF have included a simplifier for doing proofs by rewriting with conditional rewrite rules. While the simplifier of Edinburgh LCF was still coded into its proof kernel, its successor Cambridge LCF (developed primarily by Paulson in the early 1980s) took advantage of the LCF architecture by implementing the simplifier outside the kernel. This yielded a system that was just as powerful and more flexible, yet with a significantly smaller trusted code base \cite{paulson87lcf}.
+
+\subsection{Higher order logic and the definitional approach}
+
+The proof assistants that succeeded Cambridge LCF switched from LCF to a new logic---higher order logic, also known as HOL---primarily due to a new focus on hardware-related verification tasks that did not require features of LCF like general recursion or fixed point induction. Multiple lines of provers for HOL have been developed since the late 1980s, including Gordon's HOL series (starting with HOL88 and HOL90, leading up to the modern HOL4) and Paulson's Isabelle/HOL theorem prover.
+
+The syntax and type system of HOL are similar to LCF, but instead of interpreting types as domains, HOL types are modeled as ordinary sets. Accordingly, HOL drops some of LCF's features: There is no special bottom value ($\bot$) at every type, nor is there a generic fixed point combinator. However, HOL has an advantage in expressiveness over LCF, because it is higher order: That is, it can express quantification over formulas and predicates (which in HOL are simply terms with types like \isa{bool} and \isa{'a \<Rightarrow> bool}).
+
+As new proof assistants started using higher order logic, they also began to shift from an \emph{axiomatic} to a \emph{definitional} approach to building theories. ``The HOL system, unlike LCF, emphasises definition rather than axiom postulation as the primary method of developing theories. Higher order logic makes possible a purely definitional development of many mathematical objects (numbers, lists, trees etc.) and this is supported and encouraged.'' \cite[\S5.2]{Gordon2000}
+
+The obvious problem with axioms is that the whole set of them, taken together, must be trusted to be consistent. When users are adding new arbitrary axioms all the time, it is hard to maintain a high level of confidence in the soundness of the system. On the other hand, the definitional approach prescribes certain forms of ``safe'' axioms for introducing new constants and types, which are known to preserve soundness---users can freely add such definitional axioms without worry.
+
+For defining constants, it is safe to introduce axioms of the form $\mathsf{c} = t$, where \isa{c} is a new constant and $t$ is a closed term that does not mention \isa{c}. For example, in Isabelle/HOL, the existential quantifier \isa{Ex :: ('a \<Rightarrow> bool) \<Rightarrow> bool} is defined by declaring the definition axiom \isa{Ex = (\<lambda>P. \<forall>Q. (\<forall>x. P x \<longrightarrow> Q) \<longrightarrow> Q))}. The standard rules for reasoning about existentials can be derived from this definition. Contrast this with Cambridge LCF, where existential quantification is hard-coded into the formula language, and all the rules about it are axioms. (Note that this definition of \isa{Ex} could not even be expressed in the first-order LCF, since it has a higher-order type and involves quantification over formulae.)
+
+The safe way to introduce a new type in HOL is to identify values of the new type with some subset of the values of a pre-existing type. (This kind of type definition is discussed further in Chapter~\ref{ch:holcf}.) For example, in Isabelle/HOL, the product type \isa{'a \<times> 'b} is not primitive; it is defined in terms of a subset of type \isa{'a \<Rightarrow> 'b \<Rightarrow> bool}. Each pair \isa{(x, y)} corresponds to the binary predicate that is true only when applied to \isa{x} and \isa{y}, and nowhere else. Compare this with the treatment of pairs in LCF: The properties of the LCF product type and \hs{PAIR} constructor are all given by axioms.
+
+Using these low-level definitional principles for constants and types, it is possible to build high-level derived definition packages. Generally, a definition package takes a user-supplied specification of a type or constant, internally translates it into a low-level definition, and then derives high-level theorems about it. For example, Melham extended HOL88 with a definitional datatype package: Given a (possibly recursive) datatype specification, it would define the type, along with constructor functions and a recursion combinator, and derive an induction rule and other theorems \cite{melham89automating}. A similar package was developed for Isabelle/HOL soon afterwards \cite{bw99inductivedatatypes}. Another classic example is the \textsc{Recdef} package, which defines functions using well-founded recursion \cite{Slind96recdef}. Here the user supplies a set of recursive function equations and a proof of termination; the package internally creates a non-recursive low-level definition, and then proves the given equations as theorems. Packages like these provide a lot of power and automation to users, yet because they adhere to the definitional approach, they guarantee soundness without users having to trust any new code.
+
+\subsection{Isabelle/HOLCF}
+\label{sec:intro-holcf}
+
+The previous section showed some of the benefits of higher order logic over LCF, particularly the definitional approach for building trustworthy theorem proving systems. But HOL still has one drawback compared to LCF: HOL does not have a general fixed point combinator, so it does not work as well as LCF for reasoning about functional programs with general recursion. Isabelle/HOLCF is the result of an attempt to augment HOL with some features of LCF, so that users can do LCF-style reasoning about LCF terms in Isabelle/HOL.
+
+What exactly is HOLCF? It is not actually a separate logic from HOL, in the sense that LCF and HOL are separate logics. Rather, it is a \emph{model} of the LCF logic, embedded in Isabelle/HOL. To show exactly what it means for one logic to be embedded in another, it may be helpful to consider a much simpler example.
+
+\paragraph{Example: Embedding LTL in HOL.}
+
+Linear temporal logic (LTL) is a formalism for expressing and reasoning about propositions that depend on time, where time progresses in discrete steps. LTL includes standard logical connectives ($\neg$, $\wedge$, $\vee$) and also some \emph{modal operators}:  $\bigcirc P$ means that predicate $P$ holds at the next time step, and $P\,\mathcal{U}\,Q$ means that $P$ holds at every time step until $Q$ becomes true at some point in the future.
+
+In order to reason about LTL propositions, one possibility would be to write an interactive theorem prover that directly implements the LTL logic. The basic logical connectives and modal operators could be implemented as primitives, and each of the logical inference rules for LTL could be coded into the proof kernel. Another alternative is to \emph{embed} LTL inside a more expressive system, such as Isabelle/HOL. To implement the embedding, we fix a model of LTL, and then \emph{define} the LTL connectives in Isabelle/HOL in terms of their meanings in the model.
+
+The usual model for LTL interprets propositions as infinite sequences of truth values, i.e.\ functions of type \isa{nat \<Rightarrow> bool}. In this model, an LTL proposition is ``true'' if it is true \emph{now}, i.e.\ at time zero. Logical connectives of LTL are modeled by combining sequences pointwise; the \emph{next} operator shifts sequences by one.
+
+\begin{isacode}
+type_synonym ltl_prop = "nat \<Rightarrow> bool"
+\end{isacode}
+\unmedskip
+\begin{isacode}
+definition TrueLTL :: "ltl_prop \<Rightarrow> bool" ("\<Turnstile>")
+  where "\<Turnstile> P = P 0"
+\end{isacode}
+\unmedskip
+\begin{isacode}
+definition AND :: "ltl_prop \<Rightarrow> ltl_prop \<Rightarrow> ltl_prop" (infixr "\<curlywedge>" 55)
+  where "(P \<curlywedge> Q) = (\<lambda>n. P n \<and> Q n)"
+\end{isacode}
+\unmedskip
+\begin{isacode}
+definition NEXT :: "ltl_prop \<Rightarrow> ltl_prop" ("\<bigcirc>")
+  where "\<bigcirc>P = (\<lambda>n. P (n + 1))"
+\end{isacode}
+
+Similarly implementing all of the LTL connectives as definitions makes it possible to express any LTL proposition as a formula in Isabelle/HOL. To support LTL proofs, we can go on to prove each LTL inference rule as a theorem about the model of LTL. For example:
+%
+\begin{isacode}
+lemma AND_intro:
+  assumes "\<Turnstile> P" and "\<Turnstile> Q" shows "\<Turnstile> (P \<curlywedge> Q)"
+\end{isacode}
+\unmedskip
+\begin{isacode}
+lemma NEXT_AND:
+  assumes "\<Turnstile> (\<bigcirc>P \<curlywedge> \<bigcirc>Q)" shows "\<Turnstile> (\<bigcirc>(P \<curlywedge> Q))"
+\end{isacode}
+%
+A theory file could be created with proof scripts for both of these lemmas. LTL proofs could then be replayed in the Isabelle/HOL model of LTL using these rules.
+
+\paragraph{Embedding LCF in HOL.}
+
+HOLCF is an embedding of LCF in Isabelle/HOL---essentially a formalization of a model of LCF. Each of the base types and type constructors in LCF's type system corresponds to a type definition in Isabelle/HOLCF. Each primitive constant ($\mathbf{T}$, $\mathbf{F}$, $\bot_\alpha$, $\mathbf{C}_\alpha$, $\mathbf{Y}_\alpha$) and term constructor (application and abstraction) in LCF's term language is defined as a constant in Isabelle/HOLCF, allowing any LCF term to be encoded as an Isabelle term. The formula language of LCF is similarly mapped onto Isabelle terms of type \isa{bool}, so that any LCF formula can be expressed in Isabelle.
+
+As mentioned earlier, the standard model of LCF uses domain theory: LCF types are modeled as complete partial orders (cpos); the function space of LCF is modeled as the continuous function space. Formulae are modeled in the Isabelle/HOL type \isa{bool}. LCF terms are modeled using domain theory: Each LCF type is modeled in HOL as a type with a cpo structure. The LCF function type constructor is modeled in HOLCF as a new continuous function type constructor, which is separate from the existing Isabelle/HOL function type. Things like admissibility (which is a primitive concept hard-wired into the kernel of the original LCF provers) are defined as predicates in HOLCF.
+
+\paragraph{Versions of HOLCF.}
+
+The first version of HOLCF (which we will call \HOLCF{95}) was created in Munich by Regensburger \cite{regensburger94thesis, regensburger95holcf} in the mid 1990s. In terms of features, \HOLCF{95} attempted to precisely replicate the implementation details of Cambridge LCF: In particular it defines all of the same type constructors and operations that were provided by Cambridge LCF.
+
+Over the next few years, HOLCF was extended by various members of the Munich group \cite{hol+lcf}, resulting in a version we will call \HOLCF{99}. This version included one new feature in particular that brought big gains in expressiveness and automation, greatly expanding the set of programs that HOLCF could reason about: the \textsc{Domain} package \cite{Oheimb97}, which provides a high-level datatype definition command for recursive datatypes. It is similar to the datatype packages in Gordon HOL and Isabelle/HOL, except that it defines cpos with bottom values. It automates the same process by which Edinburgh and Cambridge LCF users would axiomatize new datatypes. Unfortunately, the \HOLCF{99} \textsc{Domain} package takes a step backward in terms of the trusted code base: Since it is axiomatic rather than definitional, the soundness of \HOLCF{99} depends on the correctness of much of the \textsc{Domain} package code.
+
+In the late 2000s, HOLCF was thoroughly revised and extended by the present author. \HOLCF{11} is the latest version of HOLCF; it is included as part of the 2011 release of the Isabelle theorem prover.
+
+\section{Thesis statement}
+\label{sec:intro-thesis}
+
+The original \HOLCF{95} consisted of a domain-theoretic model of the basic LCF logic in Isabelle/HOL. \HOLCF{99} essentially marked a move from plain LCF to a more expressive logic of LCF+datatypes. However, \HOLCF{99} still uses the same domain-theoretic model as \HOLCF{95}, which does not actually provide meanings for recursive datatypes---axioms are used to fill the gap.
+
+The aim of \HOLCF{11} is to take advantage of further developments in domain theory to build a more complete model of LCF, including recursive datatypes. The claim of this thesis is that with the help of some new concepts from domain theory, \HOLCF{11} advances the state of the art in formal program verification by offering an unprecedented combination of expressiveness, automation, and confidence.
+
+\begin{description*}
+
+\item[Expressiveness.] \HOLCF{11} provides definition packages that allow users to directly formalize a wide variety of functional programs. Compared to earlier versions of HOLCF, the tools in \HOLCF{11} have more capabilities, including support for new kinds of function and datatype definitions. The new tools also offer better scalability for larger, more complex datatypes and programs.
+
+\item[Automation.] With \HOLCF{11}, users can verify simple programs in a direct, highly-automated way. Programs that previous systems like \HOLCF{99} could verify are now more straightforward to define, and have shorter, more automatic proofs. The improvements in automation also make it possible to complete complicated proofs of theorems for which other reasoning techniques would be impractical.
+
+\item[Confidence.] \HOLCF{11} provides a strong argument for correctness, because its implementation is \emph{purely definitional}. Our motto: ``No new axioms!'' \HOLCF{11} is a conservative extension of Isabelle/HOL, not requiring a single new line of trusted code.
+
+\end{description*}
+
+\section{Outline}
+
+The remainder of this dissertation is organized as follows.
+
+\begin{description*}
+
+\item[Chapter \ref{ch:holcf}] This covers the formalization of the core parts of \HOLCF{11}. It includes all of the domain-theoretic concepts and type constructors that were already present in earlier versions of HOLCF. It also describes the \textsc{Cpodef} package that is used to help define types in \HOLCF{11}, and how automation works for proofs of continuity and admissibility.
+
+\item[Chapter \ref{ch:fixrec}] This chapter describes the \textsc{Fixrec} package, which lets users define recursive functions with pattern matching. It covers both usage and implementation.
+
+\item[Chapter \ref{ch:domain}] This chapter covers the usage and implementation of the \textsc{Domain} package, which is used to define recursive datatypes.
+
+\item[Chapter \ref{ch:powerdomain}] This documents the \HOLCF{11} powerdomain libraries, which are used for reasoning about nondeterministic programs. This chapter also describes the new infrastructure for ideal completion, a general domain-theoretic method for constructing types in \HOLCF{11}.
+
+\item[Chapter \ref{ch:universal}] This chapter explains the additions to the \HOLCF{11} \textsc{Domain} package that allow it to be purely definitional. The centerpiece of this chapter is the construction of a universal domain---a single cpo with a structure rich enough to encode any recursive datatype.
+
+\item[Chapter \ref{ch:case-domain}] The final chapter provides evidence for the claims in the thesis statement, by demonstrating the capabilities of \HOLCF{11} on some real examples and making comparisons to related work.
+
+\end{description*}
+
+Readers who want to learn to use \HOLCF{11}, but are not interested so much in the implementation, may want to focus on certain parts of this document. \HOLCF{11} users should be able to safely skip the section about \textsc{Cpodef} in Chapter~\ref{ch:holcf}, the implementation sections of Chapters \ref{ch:fixrec} and \ref{ch:domain}, and the second half of Chapter~\ref{ch:powerdomain} (from ideal completion onwards). Most of Chapter~\ref{ch:universal} can be skipped, although \HOLCF{11} users should at least know about the existence of the \isa{"domain"} and \isa{predomain} type classes (Sections \ref{sec:universal-representable} and \ref{sec:universal-predomain}).
+
+The proof methods used in the case studies of Chapter~\ref{ch:case-domain} may be of interest, not just to practitioners of formal reasoning in \HOLCF{11}, but to anyone interested in verification of functional programs in general, formal or otherwise.
