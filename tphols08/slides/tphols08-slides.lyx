@@ -1,0 +1,736 @@
+#LyX 1.5.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 276
+\begin_document
+\begin_header
+\textclass beamer
+\begin_preamble
+\usetheme{Copenhagen}
+% or ...
+
+\setbeamercovered{transparent}
+% or whatever (possibly just delete it)
+\end_preamble
+\language english
+\inputencoding auto
+\font_roman times
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\paperfontsize default
+\spacing single
+\papersize default
+\use_geometry false
+\use_amsmath 2
+\use_esint 0
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\secnumdepth 2
+\tocdepth 2
+\paragraph_separation indent
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\author "" 
+\author "" 
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Reasoning with Powerdomains in Isabelle/HOLCF
+\end_layout
+
+\begin_layout Author
+Brian Huffman
+\end_layout
+
+\begin_layout Institute
+Department of Computer Science
+\newline
+Portland State University
+\end_layout
+
+\begin_layout Date
+TPHOLs 2008, August 18--21
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+%
+\backslash
+beamerdefaultoverlayspecification{<+->}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout BeginFrame
+What are Powerdomains?
+\end_layout
+
+\begin_layout Standard
+A powerdomain is
+\end_layout
+
+\begin_layout Itemize
+a monad
+\end_layout
+
+\begin_layout Itemize
+with a nondeterministic choice operator
+\end_layout
+
+\begin_layout Standard
+Powerdomains adapt the notion of powersets
+\newline
+ to work with domain theory.
+\end_layout
+
+\begin_layout BeginFrame
+What are Powerdomains Good For?
+\end_layout
+
+\begin_layout Standard
+Powerdomains are good for reasoning about
+\end_layout
+
+\begin_layout Itemize
+Nondeterministic algorithms
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+Write algorithms monadically in a powerdomain
+\end_layout
+
+\begin_layout Itemize
+Works with arbitrary recursion
+\end_layout
+
+\end_deeper
+\begin_layout Itemize
+Parallel computation
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+Resumption monad transformer models interleaving
+\end_layout
+
+\begin_layout Itemize
+Powerdomain models nondeterministic scheduler
+\end_layout
+
+\end_deeper
+\begin_layout BeginFrame
+Monads with Nondeterministic Choice
+\end_layout
+
+\begin_layout Standard
+Haskell type class for monads with nondeterministic choice operator
+\end_layout
+
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+class (Monad m) => MultiMonad m where
+\end_layout
+
+\begin_layout LyX-Code
+  (+|+) :: m a -> m a -> m a
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+Haskell lists can model nondeterministic computation
+\end_layout
+
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+instance MultiMonad [] where
+\end_layout
+
+\begin_layout LyX-Code
+  xs +|+ ys = xs ++ ys
+\end_layout
+
+\end_deeper
+\begin_layout BeginFrame
+Using List Monad for Nondeterminism
+\end_layout
+
+\begin_layout ColumnsTopAligned
+
+\end_layout
+
+\begin_deeper
+\begin_layout Column
+5cm
+\end_layout
+
+\begin_layout Standard
+Good for modeling in Haskell:
+\end_layout
+
+\begin_layout Itemize
+Executable
+\end_layout
+
+\begin_layout Column
+5cm
+\end_layout
+
+\begin_layout Standard
+Bad for denotational semantics:
+\end_layout
+
+\begin_layout Itemize
+Not abstract enough
+\end_layout
+
+\begin_layout Itemize
+Problems with partial/infinite values
+\end_layout
+
+\end_deeper
+\begin_layout BeginFrame
+Example Algorithms
+\end_layout
+
+\begin_layout Itemize
+
+\family typewriter
+f1
+\family default
+ and 
+\family typewriter
+f2
+\family default
+ should denote the same value
+\end_layout
+
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+f1, f2 :: (MultiMonad m) => Int -> m Int
+\end_layout
+
+\begin_layout LyX-Code
+f1 n = return (n+1) +|+ return (n-1)
+\end_layout
+
+\begin_layout LyX-Code
+f2 n = return (n-1) +|+ return (n+1)
+\end_layout
+
+\end_deeper
+\begin_layout Pause
+
+\end_layout
+
+\begin_layout Itemize
+
+\family typewriter
+g1
+\family default
+ and 
+\family typewriter
+g2
+\family default
+ should denote different values
+\end_layout
+
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+g1, g2 :: (MultiMonad m) => Int -> m Int
+\end_layout
+
+\begin_layout LyX-Code
+g1 n = return n +|+ g1 (n+1) +|+ g1 (n-1)
+\end_layout
+
+\begin_layout LyX-Code
+g2 n = return n +|+ g2 (n+1)
+\end_layout
+
+\end_deeper
+\begin_layout BeginFrame
+Powerdomain Axioms
+\end_layout
+
+\begin_layout Enumerate
+Return and bind satisfy monad laws
+\end_layout
+
+\begin_deeper
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+(return x) >>= f == f x
+\end_layout
+
+\begin_layout LyX-Code
+a >>= return == a
+\end_layout
+
+\begin_layout LyX-Code
+(a >>= f) >>= g == a >>= (
+\backslash
+x -> f x >>= g)
+\end_layout
+
+\end_deeper
+\end_deeper
+\begin_layout Enumerate
+Bind distributes over choice operator
+\end_layout
+
+\begin_deeper
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+(a +|+ b) >>= f == (a >>= f) +|+ (b >>= f)
+\end_layout
+
+\end_deeper
+\end_deeper
+\begin_layout Enumerate
+Choice operator is associative, commutative, idempotent
+\end_layout
+
+\begin_deeper
+\begin_layout ExampleBlock
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+{
+\end_layout
+
+\end_inset
+
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+(a +|+ b) +|+ c == a +|+ (b +|+ c)
+\end_layout
+
+\begin_layout LyX-Code
+a +|+ b == b +|+ a
+\end_layout
+
+\begin_layout LyX-Code
+a +|+ a == a
+\end_layout
+
+\end_deeper
+\end_deeper
+\begin_layout BeginFrame
+Notes on Different Kinds of Powerdomains
+\end_layout
+
+\begin_layout Itemize
+Upper
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+Demonic
+\begin_inset Quotes erd
+\end_inset
+
+ nondeterminism
+\end_layout
+
+\begin_layout Itemize
+
+\family typewriter
+undefined +|+ m = undefined
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+Possible non-termination is just as bad as never terminating
+\begin_inset Quotes erd
+\end_inset
+
+
+\end_layout
+
+\begin_layout Itemize
+Good for total correctness properties
+\end_layout
+
+\begin_layout Pause
+
+\end_layout
+
+\end_deeper
+\begin_layout Itemize
+Lower
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+Angelic
+\begin_inset Quotes erd
+\end_inset
+
+ nondeterminism
+\end_layout
+
+\begin_layout Itemize
+
+\family typewriter
+undefined +|+ m = m
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+I don't care about execution paths that don't terminate
+\begin_inset Quotes erd
+\end_inset
+
+
+\end_layout
+
+\begin_layout Itemize
+Good for partial correctness properties
+\end_layout
+
+\begin_layout Pause
+
+\end_layout
+
+\end_deeper
+\begin_layout Itemize
+Convex
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+Distinguishes more values than upper or lower
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+free domain-algebra
+\begin_inset Quotes erd
+\end_inset
+
+ w.r.t.
+ powerdomain axioms
+\end_layout
+
+\end_deeper
+\begin_layout BeginFrame
+Formalization in Isabelle/HOLCF
+\end_layout
+
+\begin_layout Standard
+HOLCF logic in Isabelle2008 now includes powerdomain library
+\end_layout
+
+\begin_layout Itemize
+Type constructors
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+
+\family typewriter
+upper_pd
+\family default
+, 
+\family typewriter
+lower_pd
+\family default
+, 
+\family typewriter
+convex_pd
+\end_layout
+
+\end_deeper
+\begin_layout Itemize
+Operations on each type
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+
+\family typewriter
+unit
+\family default
+, 
+\family typewriter
+bind
+\family default
+, 
+\family typewriter
+plus
+\family default
+, 
+\family typewriter
+map
+\family default
+, 
+\family typewriter
+join
+\end_layout
+
+\begin_layout Itemize
+coercions from 
+\family typewriter
+convex_pd
+\end_layout
+
+\end_deeper
+\begin_layout Itemize
+Proof automation
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+ACI normalization
+\end_layout
+
+\begin_layout Itemize
+Simplifying inequalities
+\end_layout
+
+\end_deeper
+\begin_layout BeginFrame
+Summary
+\end_layout
+
+\begin_layout Itemize
+Powerdomains are well-suited for reasoning about nondeterminism in functional
+ programs
+\end_layout
+
+\begin_layout Itemize
+
+\color none
+You can do proofs about powerdomains right now in Isabelle/HOLCF
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+vskip0pt plus.5fill
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Itemize
+Future work
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+Proofs about parallel code, using monad transformers
+\end_layout
+
+\end_deeper
+\begin_layout EndFrame
+
+\end_layout
+
+\end_body
+\end_document

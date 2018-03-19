@@ -1,0 +1,4572 @@
+#LyX 1.5.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 276
+\begin_document
+\begin_header
+\textclass llncs
+\begin_preamble
+\usepackage{ae}
+
+\usepackage{tikz}
+\usetikzlibrary{snakes}
+\usetikzlibrary{arrows}
+\usetikzlibrary{shapes}
+\end_preamble
+\language english
+\inputencoding auto
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\paperfontsize default
+\spacing single
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\cite_engine basic
+\use_bibtopic false
+\paperorientation portrait
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\defskip medskip
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\author "" 
+\author "" 
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Reasoning with Powerdomains in Isabelle/HOLCF
+\end_layout
+
+\begin_layout Author
+Brian Huffman
+\end_layout
+
+\begin_layout Institute
+Portland State University
+\newline
+
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+email{brianh@cs.pdx.edu}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Abstract
+This paper presents the first fully-mechanized formalization of powerdomains,
+ implemented in the HOLCF logic of the Isabelle theorem prover.
+ The powerdomain library provides an abstract view of powerdomains to the
+ user, hiding the complicated implementation details.
+ The library also provides proof automation, in the form of sets of rewrite
+ rules for solving equalities and inequalities on powerdomains.
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Standard
+Powerdomains are a domain-theoretic analog of powersets, which were designed
+ for reasoning about the semantics of nondeterministic programs.
+\begin_inset LatexCommand cite
+key "plotkin76powerdomain"
+
+\end_inset
+
+ The use of powerdomains for reasoning about nondeterminism (and domain-theoreti
+c denotational semantics in general) has declined in recent years, which
+ I believe is primarily due to their perceived complexity.
+ Compared to other more syntactic approaches to semantics, domain theory
+ and powerdomains require a lot of mathematical sophistication to understand.
+ This is a significant barrier for anyone who might want to use denotational
+ semantics to reason about computation.
+ It is my hope that the existence of good formalized libraries will remove
+ that barrier to the use of domain theory for denotational semantics.
+\end_layout
+
+\begin_layout Standard
+In this paper I attempt to demonstrate that powerdomains are a natural way
+ for functional programmers to reason about nondeterministic programs.
+ Using Haskell-style monadic code as a starting point, Section 
+\begin_inset LatexCommand ref
+reference "sec:Nondeterminism-Monads"
+
+\end_inset
+
+ motivates the definition of a powerdomain.
+ Section 
+\begin_inset LatexCommand ref
+reference "sec:Powerdomains"
+
+\end_inset
+
+ examines the three main varieties of powerdomains, and attempts to convey
+ some intuitions about their structures and what each is good for.
+ For readers wishing to use the powerdomain library, Section 
+\begin_inset LatexCommand ref
+reference "sec:HOLCF-powerdomain-library"
+
+\end_inset
+
+ documents all of the powerdomain operations provided by the library, as
+ well as some of the lemmas and proof automation that is available.
+ Section 
+\begin_inset LatexCommand ref
+reference "sec:Implementation"
+
+\end_inset
+
+ describes the implementation of the powerdomain library; understanding
+ this section is not necessary in order to use the library, and may be skipped
+ on first reading.
+\end_layout
+
+\begin_layout Standard
+This paper assumes some familiarity with the Haskell language.
+ In particular, I expect the reader to know about monads, and the monad
+ laws.
+ I also assume that the reader is familiar with some of the basics of domain
+ theory, which is traditionally used for reasoning denotationally about
+ Haskell programs.
+\begin_inset LatexCommand cite
+key "bird98introduction"
+
+\end_inset
+
+ In particular, the reader should know about bottoms (
+\begin_inset Formula $\bot$
+\end_inset
+
+), complete partial orders (
+\begin_inset Formula $\sqsubseteq$
+\end_inset
+
+), limits of chains, continuous functions, and admissible predicates.
+\end_layout
+
+\begin_layout Section
+\begin_inset LatexCommand label
+name "sec:Nondeterminism-Monads"
+
+\end_inset
+
+Nondeterminism monads
+\end_layout
+
+\begin_layout Standard
+From a functional programmer's perspective, a powerdomain can be thought
+ of as simply a special kind of monad for nondeterminism.
+ In addition to the standard monad operations 
+\emph on
+return
+\emph default
+ and 
+\emph on
+bind
+\emph default
+, a powerdomain also provides a binary operation for making a nondeterministic
+ choice.
+ In Haskell syntax, we can specify a subclass of monads that have such a
+ binary choice operator:
+\begin_inset LatexCommand cite
+key "papaspyrou00study"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Standard
+
+
+\backslash
+begin{verbatim}
+\end_layout
+
+\begin_layout Standard
+
+class (Monad m) => MultiMonad m where
+\end_layout
+
+\begin_layout Standard
+
+  (+|+) :: m a -> m a -> m a
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{verbatim}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Haskell programmers often use the list monad to model nondeterministic computati
+ons; functions indicate multiple possible return values by enumerating them
+ in a list.
+ In this case, the list append operator 
+\begin_inset Formula $(+\!+)$
+\end_inset
+
+ fills the role of nondeterministic choice.
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Standard
+
+
+\backslash
+begin{verbatim}
+\end_layout
+
+\begin_layout Standard
+
+instance MultiMonad [] where
+\end_layout
+
+\begin_layout Standard
+
+  xs +|+ ys = xs ++ ys
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{verbatim}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The list monad has the great advantage of being executable: If you code
+ up a nondeterministic algorithm in the list monad, you can just run it
+ and see the results.
+ However, for 
+\emph on
+reasoning
+\emph default
+ about nondeterministic algorithms, the list monad falls short in two important
+ ways.
+\end_layout
+
+\begin_layout Standard
+First, the list monad is not abstract enough: There are many different lists
+ that represent the same set of possible return values.
+ For example, consider a nondeterministic integer computation 
+\begin_inset Formula $f$
+\end_inset
+
+ with three possible outcomes: a return value of 3, a return value of 5,
+ or divergence (i.e.
+ a return value of 
+\begin_inset Formula $\bot$
+\end_inset
+
+).
+ The lists 
+\begin_inset Formula $[3,5,\bot]$
+\end_inset
+
+ and 
+\begin_inset Formula $[5,5,3,\bot,3]$
+\end_inset
+
+ both represent the value of 
+\begin_inset Formula $f$
+\end_inset
+
+ equally well; both represent the set 
+\begin_inset Formula $\{3,5,\bot\}$
+\end_inset
+
+.
+ If divergence were not a possibility, then we could canonicalize the lists
+ by sorting and removing duplicates---but obviously this does not work in
+ general.
+\end_layout
+
+\begin_layout Standard
+The second problem is that the list monad does not behave well in the presence
+ of infinite or partial output.
+ The problem originates with the definition of append: If 
+\begin_inset Formula $xs$
+\end_inset
+
+ is an infinite list, then 
+\begin_inset Formula $xs+\!\!+ys$
+\end_inset
+
+ does not depend on 
+\begin_inset Formula $ys$
+\end_inset
+
+ at all.
+ If 
+\begin_inset Formula $ys$
+\end_inset
+
+ includes some possible outcomes that do not already occur in 
+\begin_inset Formula $xs$
+\end_inset
+
+, then they get thrown away.
+ Similarly, if 
+\begin_inset Formula $xs$
+\end_inset
+
+ is a partial list, like 
+\begin_inset Formula $1:2:\bot$
+\end_inset
+
+, then 
+\begin_inset Formula $xs+\!\!+ys$
+\end_inset
+
+ also ignores its second argument.
+\end_layout
+
+\begin_layout Standard
+This problem is demonstrated by the following recursive nondeterministic
+ computation.
+ Any integer greater than or equal to 2 should be a possible result.
+ However, when interpreted in the list monad, only even integers are included.
+ The problem is that since the denotation of 
+\begin_inset Formula $f$
+\end_inset
+
+ is an infinite list, the 
+\begin_inset Quotes eld
+\end_inset
+
+return 1
+\begin_inset Quotes erd
+\end_inset
+
+ is never reached.
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Standard
+
+
+\backslash
+begin{verbatim}
+\end_layout
+
+\begin_layout Standard
+
+f :: (MultiMonad m) => m Int
+\end_layout
+
+\begin_layout Standard
+
+f = do x <- return 0 +|+ f +|+ return 1
+\end_layout
+
+\begin_layout Standard
+
+       return (x+2)
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{verbatim}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Another possible nondeterminism monad for Haskell is the binary tree, whose
+ definition is shown below.
+ The binary tree monad solves the second problem that lists had: Unlike
+ the list append operator, the 
+\emph on
+Node
+\emph default
+ constructor never ignores either of its arguments, even if the other is
+ partial or infinite.
+ However, the problem of multiple representations remains; in fact this
+ problem is even worse than before.
+ Since the choice operator for trees is a data constructor, it doesn't satisfy
+ any non-trivial equalities, while list append is at least associative.
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+begin{verbatim}
+\end_layout
+
+\begin_layout Standard
+
+data Tree a = Leaf a | Node (Tree a) (Tree a)
+\end_layout
+
+\begin_layout Standard
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+instance Monad Tree where
+\end_layout
+
+\begin_layout Standard
+
+  return x = Leaf x
+\end_layout
+
+\begin_layout Standard
+
+  Leaf x >>= f = f x
+\end_layout
+
+\begin_layout Standard
+
+  Node l r >>= f = Node (l >>= f) (r >>= f)
+\end_layout
+
+\begin_layout Standard
+
+ 
+\end_layout
+
+\begin_layout Standard
+
+instance MultiMonad Tree where
+\end_layout
+
+\begin_layout Standard
+
+  l +|+ r = Node l r
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{verbatim}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For doing formal reasoning about nondeterministic computations, an ideal
+ nondeterminism monad should satisfy all the axioms listed in Fig.
+ 
+\begin_inset LatexCommand ref
+reference "fig:pd-laws"
+
+\end_inset
+
+.
+ We will call a monad that satisfies all seven laws a 
+\emph on
+powerdomain
+\emph default
+.
+ Laws 1--3 are just the standard Haskell monad laws.
+ Law 4 says that bind distributes over the choice operator, and laws 5--7
+ state that choice is associative, commutative and idempotent.
+ The list monad satisfies laws 1--5, but not 6 or 7; the binary tree monad
+ satisfies only 1--4.
+ There is no obvious way to define a true powerdomain directly in Haskell,
+ but in the next section we will see how to define powerdomains mathematically.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Enumerate
+
+\family typewriter
+return x >
+\begin_inset Formula $\!$
+\end_inset
+
+>= f = f x
+\end_layout
+
+\begin_layout Enumerate
+
+\family typewriter
+xs >
+\begin_inset Formula $\!$
+\end_inset
+
+>= return = xs
+\end_layout
+
+\begin_layout Enumerate
+
+\family typewriter
+(xs >
+\begin_inset Formula $\!$
+\end_inset
+
+>= f) >
+\begin_inset Formula $\!$
+\end_inset
+
+>= g = xs >
+\begin_inset Formula $\!$
+\end_inset
+
+>= (
+\backslash
+x -> f x >
+\begin_inset Formula $\!$
+\end_inset
+
+>= g)
+\end_layout
+
+\begin_layout Enumerate
+
+\family typewriter
+(xs +|+ ys) >
+\begin_inset Formula $\!$
+\end_inset
+
+>= f = (xs >
+\begin_inset Formula $\!$
+\end_inset
+
+>= f) +|+ (ys >
+\begin_inset Formula $\!$
+\end_inset
+
+>= f)
+\end_layout
+
+\begin_layout Enumerate
+
+\family typewriter
+(xs +|+ ys) +|+ zs = xs +|+ (ys +|+ zs)
+\end_layout
+
+\begin_layout Enumerate
+
+\family typewriter
+xs +|+ ys = ys +|+ xs
+\end_layout
+
+\begin_layout Enumerate
+
+\family typewriter
+xs +|+ xs = xs
+\end_layout
+
+\begin_layout Standard
+\begin_inset Caption
+
+\begin_layout Standard
+\begin_inset LatexCommand label
+name "fig:pd-laws"
+
+\end_inset
+
+The powerdomain laws
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Note that in addition to the seven powerdomain laws, there is another implicit
+ requirement for powerdomains: All of the operations must be monotone and
+ continuous, i.e.
+ they must respect the cpo structure of the types on which they operate.
+ In Haskell, every definable function is automatically continuous by constructio
+n, while in Isabelle, the logic permits the definition of functions which
+ are not necessarily continuous.
+ Continuity is a concept defined in Isabelle/HOLCF, and it is necessary
+ to prove that each function defined in the library is continuous.
+\end_layout
+
+\begin_layout Section
+\begin_inset LatexCommand label
+name "sec:Powerdomains"
+
+\end_inset
+
+Powerdomains
+\end_layout
+
+\begin_layout Standard
+There are multiple ways to define a powerdomain with operations that satisfy
+ all of the desired laws.
+ The three most common are known as the upper, lower, and convex powerdomains.
+ These are also respectively known as the Smyth, Hoare, and Plotkin powerdomains.
+ Historically, each variety is also associated with a musical symbol: sharp
+ (
+\begin_inset Formula $\sharp$
+\end_inset
+
+) for upper, flat (
+\begin_inset Formula $\flat$
+\end_inset
+
+) for lower, and natural (
+\begin_inset Formula $\natural$
+\end_inset
+
+) for the convex powerdomain.
+\end_layout
+
+\begin_layout Standard
+Before we dive into the details of the various powerdomains, first let us
+ introduce some more notation.
+ We will borrow the variable naming convention often used for lists in Haskell:
+ For values of powerdomain types we use names like 
+\begin_inset Formula $xs$
+\end_inset
+
+, 
+\begin_inset Formula $ys$
+\end_inset
+
+, or 
+\begin_inset Formula $zs$
+\end_inset
+
+, while for the underlying elements we use names like 
+\begin_inset Formula $x$
+\end_inset
+
+, 
+\begin_inset Formula $y$
+\end_inset
+
+, or 
+\begin_inset Formula $z$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+Also, we will consistently use set-style notation when talking about powerdomain
+s.
+ The singleton set syntax 
+\begin_inset Formula $\{-\}$
+\end_inset
+
+ denotes the monadic return operator, 
+\begin_inset Quotes eld
+\end_inset
+
+unit
+\begin_inset Quotes erd
+\end_inset
+
+; and the set union symbol 
+\begin_inset Formula $(\cup)$
+\end_inset
+
+ denotes the nondeterministic choice operator, 
+\begin_inset Quotes eld
+\end_inset
+
+plus
+\begin_inset Quotes erd
+\end_inset
+
+.
+ Also, we will use set enumerations like 
+\begin_inset Formula $\{x,y,z\}$
+\end_inset
+
+ as shorthand for 
+\begin_inset Formula $\{x\}\cup\{y\}\cup\{z\}$
+\end_inset
+
+.
+ When necessary, we will indicate a specific powerdomain by using the appropriat
+e musical symbol as a superscript.
+\end_layout
+
+\begin_layout Subsection
+Convex powerdomain
+\end_layout
+
+\begin_layout Standard
+For a given element domain 
+\begin_inset Formula $\alpha$
+\end_inset
+
+, the convex powerdomain 
+\begin_inset Formula $\mathcal{P}^{\natural}(\alpha)$
+\end_inset
+
+ is the 
+\emph on
+free continuous domain-algebra
+\emph default
+ over the constructors 
+\begin_inset Formula $\{-\}^{\natural}$
+\end_inset
+
+ and 
+\begin_inset Formula $(\cup^{\natural})$
+\end_inset
+
+, modulo the associativity, commutativity, and idempotence of 
+\begin_inset Formula $(\cup^{\natural})$
+\end_inset
+
+.
+ (This construction is explained in 
+\begin_inset LatexCommand cite
+after "\\S6.1"
+key "abramsky94domain"
+
+\end_inset
+
+) The convex powerdomain is 
+\begin_inset Quotes eld
+\end_inset
+
+universal
+\begin_inset Quotes erd
+\end_inset
+
+ in a category-theoretical sense, in that there is a unique mapping (preserving
+ unit and plus) from the convex powerdomain into any other powerdomain.
+\end_layout
+
+\begin_layout Standard
+Freeness means two things here.
+ First, it says that the convex powerdomain consists only of values that
+ can be built up from applications of unit and plus (i.e.
+ the convex powerdomain has 
+\begin_inset Quotes eld
+\end_inset
+
+no junk
+\begin_inset Quotes erd
+\end_inset
+
+).
+ Secondly, freeness also means that no nontrivial equalities between terms
+ should hold, except those required by the laws (i.e.
+ the convex powerdomain has 
+\begin_inset Quotes eld
+\end_inset
+
+no confusion
+\begin_inset Quotes erd
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Standard
+In the context of complete partial orders, the 
+\begin_inset Quotes eld
+\end_inset
+
+no junk
+\begin_inset Quotes erd
+\end_inset
+
+ property has a slightly different meaning than it does for ordinary inductive
+ datatypes.
+ As a cpo, the convex powerdomain includes values built from a finite number
+ of constructor applications, plus additional values that result as limits
+ of chains.
+ Thus the convex powerdomain has an induction rule like the following: 
+\begin_inset Formula \begin{equation}
+\begin{array}{c}
+\mbox{adm}(P)\quad\forall x.\, P(\{x\}^{\natural})\quad\forall xs\, ys.\, P(xs)\longrightarrow P(ys)\longrightarrow P(xs\cup^{\natural}ys)\\
+\hline \forall xs.\, P(xs)\end{array}\label{eq:pd-induct}\end{equation}
+
+\end_inset
+
+Admissibility of 
+\begin_inset Formula $P$
+\end_inset
+
+ means that for any chain of elements 
+\begin_inset Formula $x_{i}$
+\end_inset
+
+ such that 
+\begin_inset Formula $P(x_{i})$
+\end_inset
+
+ holds for all 
+\begin_inset Formula $i$
+\end_inset
+
+, 
+\begin_inset Formula $P$
+\end_inset
+
+ must also hold for the limit 
+\begin_inset Formula $\bigsqcup_{i}x_{i}$
+\end_inset
+
+.
+ This side condition reflects the fact that some values are only expressible
+ as limits of chains---most induction rules in HOLCF have a similar admissibilit
+y side condition.
+ (HOLCF can automatically prove admissibility for most inductive predicates
+ used in practice.)
+\end_layout
+
+\begin_layout Standard
+We still need to check that we can satisfy all of the powerdomain laws from
+ Fig.
+ 
+\begin_inset LatexCommand ref
+reference "fig:pd-laws"
+
+\end_inset
+
+.
+ Laws 5--7 hold by construction.
+ We can use laws 1 and 4 as defining equations for the bind operator.
+ Finally, it is straightforward to prove laws 2 and 3 by induction.
+\end_layout
+
+\begin_layout Definition
+We say that 
+\begin_inset Formula $x$
+\end_inset
+
+ is a 
+\emph on
+member
+\emph default
+ of 
+\begin_inset Formula $xs$
+\end_inset
+
+ if 
+\begin_inset Formula $\{x\}\cup xs=xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+If 
+\begin_inset Formula $xs$
+\end_inset
+
+ represents a nondeterministic computation, and 
+\begin_inset Formula $x$
+\end_inset
+
+ is one of the possible results, then 
+\begin_inset Formula $x$
+\end_inset
+
+ must be a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+.
+ However, the set of members is not necessarily equal to the set of possible
+ results.
+ Not every conceivable set of results can be precisely represented in the
+ convex powerdomain, as the following theorem implies.
+\end_layout
+
+\begin_layout Theorem
+\begin_inset LatexCommand label
+name "thm:mem-convex"
+
+\end_inset
+
+Let 
+\begin_inset Formula $xs$
+\end_inset
+
+ be a value in a convex powerdomain.
+ Then the set of members of 
+\begin_inset Formula $xs$
+\end_inset
+
+ is convex-closed.
+\end_layout
+
+\begin_layout Proof
+Let 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $z$
+\end_inset
+
+ be members of 
+\begin_inset Formula $xs$
+\end_inset
+
+, and let 
+\begin_inset Formula $y$
+\end_inset
+
+ be any value between 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $z$
+\end_inset
+
+, such that 
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+ and 
+\begin_inset Formula $y\sqsubseteq z$
+\end_inset
+
+.
+ We will show that 
+\begin_inset Formula $y$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_deeper
+\begin_layout Enumerate
+From 
+\begin_inset Formula $y\sqsubseteq z$
+\end_inset
+
+, we have 
+\begin_inset Formula $\{y\}^{\natural}\cup^{\natural}xs\sqsubseteq\{z\}^{\natural}\cup^{\natural}xs$
+\end_inset
+
+, by monotonicity.
+\newline
+Then since 
+\begin_inset Formula $z$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs,$
+\end_inset
+
+ we have 
+\begin_inset Formula $\{z\}^{\natural}\cup^{\natural}xs=xs$
+\end_inset
+
+.
+\newline
+Therefore 
+\begin_inset Formula $\{y\}^{\natural}\cup^{\natural}xs\sqsubseteq xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Enumerate
+From 
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+, we have 
+\begin_inset Formula $\{x\}^{\natural}\cup^{\natural}xs\sqsubseteq\{y\}^{\natural}\cup^{\natural}xs$
+\end_inset
+
+, by monotonicity.
+\newline
+Then since 
+\begin_inset Formula $x$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs,$
+\end_inset
+
+ we have 
+\begin_inset Formula $\{x\}^{\natural}\cup^{\natural}xs=xs$
+\end_inset
+
+.
+\newline
+Therefore 
+\begin_inset Formula $xs\sqsubseteq\{y\}^{\natural}\cup^{\natural}xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+By antisymmetry we have 
+\begin_inset Formula $\{y\}^{\natural}\cup^{\natural}xs=xs$
+\end_inset
+
+, thus 
+\begin_inset Formula $y$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+.
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+qed
+\end_layout
+
+\end_inset
+
+ 
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+Theorem 
+\begin_inset LatexCommand ref
+reference "thm:mem-convex"
+
+\end_inset
+
+ says that the set of members of 
+\begin_inset Formula $xs$
+\end_inset
+
+ includes at least the convex closure of the set of possible return values.
+ In practice, this means that sometimes nondeterministic computations with
+ different sets of possible outcomes nevertheless have the same denotation
+ in the convex powerdomain.
+\end_layout
+
+\begin_layout Standard
+Consider the domain of lifted booleans, which contains three values: True,
+ False, and 
+\begin_inset Formula $\bot$
+\end_inset
+
+.
+ On top of this, we can construct the domain of pairs of booleans, which
+ is ordered component-wise.
+ Now imagine we have a nondeterministic computation 
+\begin_inset Formula $f$
+\end_inset
+
+ which has exactly two possible return values: either 
+\begin_inset Formula $(\mbox{True},\mbox{False})$
+\end_inset
+
+ or 
+\begin_inset Formula $(\bot,\bot)$
+\end_inset
+
+.
+ Next, define a computation 
+\begin_inset Formula $g$
+\end_inset
+
+ which additionally has a third possible return value of 
+\begin_inset Formula $(\mbox{True},\bot)$
+\end_inset
+
+.
+ Here is how we might specify 
+\begin_inset Formula $f$
+\end_inset
+
+ and 
+\begin_inset Formula $g$
+\end_inset
+
+ in Haskell:
+\end_layout
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Standard
+
+
+\backslash
+begin{verbatim}
+\end_layout
+
+\begin_layout Standard
+
+f, g :: (MultiMonad m) => m (Bool, Bool)
+\end_layout
+
+\begin_layout Standard
+
+f = return (True, False) +|+ return (undefined, undefined)
+\end_layout
+
+\begin_layout Standard
+
+g = return (True, undefined) +|+ f
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{verbatim}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+If we model these computations using the convex powerdomain monad, then
+ the denotation of 
+\begin_inset Formula $f$
+\end_inset
+
+ is {(True, False), (
+\begin_inset Formula $\bot$
+\end_inset
+
+, 
+\begin_inset Formula $\bot$
+\end_inset
+
+)
+\begin_inset Formula $\}^{\natural}$
+\end_inset
+
+, and the denotation of 
+\begin_inset Formula $g$
+\end_inset
+
+ is {(True, 
+\begin_inset Formula $\bot$
+\end_inset
+
+), (True, False), (
+\begin_inset Formula $\bot$
+\end_inset
+
+, 
+\begin_inset Formula $\bot$
+\end_inset
+
+)
+\begin_inset Formula $\}^{\natural}$
+\end_inset
+
+.
+ But according to Theorem 
+\begin_inset LatexCommand ref
+reference "thm:mem-convex"
+
+\end_inset
+
+, these values are actually equal---the convex powerdomain does not distinguish
+ between the computations 
+\begin_inset Formula $f$
+\end_inset
+
+ and 
+\begin_inset Formula $g$
+\end_inset
+
+.
+ In general, two computations will be identified if their respective sets
+ of possible results have the same convex closure.
+\end_layout
+
+\begin_layout Standard
+This convex closure thing may seem a little weird; why bother with all this,
+ when we could just represent multiple result values using ordinary sets?
+ The weirdness is a small price to pay for a significant bonus: Since powerdomai
+ns are cpos, and all the operations are continuous, that means that we can
+ freely use powerdomains with general recursion---something you cannot do
+ with ordinary powersets.
+\end_layout
+
+\begin_layout Subsection
+Upper powerdomain
+\end_layout
+
+\begin_layout Standard
+The upper powerdomain 
+\begin_inset Formula $\mathcal{P}^{\sharp}(\alpha)$
+\end_inset
+
+ can be defined in the same manner as the convex powerdomain, except we
+ require 
+\begin_inset Formula $(\cup^{\sharp})$
+\end_inset
+
+ to satisfy one extra law:
+\begin_inset Formula \begin{equation}
+xs\cup^{\sharp}ys\sqsubseteq xs\label{eq:upper-plus}\end{equation}
+
+\end_inset
+
+(Note that due to commutativity, the statement 
+\begin_inset Formula $xs\cup^{\sharp}ys\sqsubseteq ys$
+\end_inset
+
+ is equivalent.) This law makes the upper powerdomain into a semilattice,
+ where 
+\begin_inset Formula $xs\cup^{\sharp}ys$
+\end_inset
+
+ is the meet, or greatest lower bound, of 
+\begin_inset Formula $xs$
+\end_inset
+
+ and 
+\begin_inset Formula $ys$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Theorem
+\begin_inset LatexCommand label
+name "thm:mem-upper"
+
+\end_inset
+
+Let 
+\begin_inset Formula $xs$
+\end_inset
+
+ be a value in an upper powerdomain.
+ Then the set of members of 
+\begin_inset Formula $xs$
+\end_inset
+
+ is upward-closed.
+\end_layout
+
+\begin_layout Proof
+Let 
+\begin_inset Formula $x$
+\end_inset
+
+ be a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+, and let 
+\begin_inset Formula $y$
+\end_inset
+
+ be any value such that 
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+.
+ We will show that 
+\begin_inset Formula $y$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_deeper
+\begin_layout Enumerate
+From the symmetric form of Eq.
+ 
+\begin_inset LatexCommand ref
+reference "eq:upper-plus"
+
+\end_inset
+
+, we have 
+\begin_inset Formula $\{y\}^{\sharp}\cup^{\sharp}xs\sqsubseteq xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Enumerate
+From 
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+, we have 
+\begin_inset Formula $\{x\}^{\sharp}\cup^{\sharp}xs\sqsubseteq\{y\}^{\sharp}\cup^{\sharp}xs$
+\end_inset
+
+, by monotonicity.
+\newline
+Then since 
+\begin_inset Formula $x$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs,$
+\end_inset
+
+ we have 
+\begin_inset Formula $\{x\}^{\sharp}\cup^{\sharp}xs=xs$
+\end_inset
+
+.
+\newline
+Therefore 
+\begin_inset Formula $xs\sqsubseteq\{y\}^{\sharp}\cup^{\sharp}xs$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+By antisymmetry we have 
+\begin_inset Formula $\{y\}^{\sharp}\cup^{\sharp}xs=xs$
+\end_inset
+
+, thus 
+\begin_inset Formula $y$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+.
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+qed
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_deeper
+\begin_layout Standard
+A consequence of this theorem is that if 
+\begin_inset Formula $\bot$
+\end_inset
+
+ is a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+, then everything is a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+.
+ In other words, if a nondeterministic computation has any possibility of
+ returning 
+\begin_inset Formula $\bot$
+\end_inset
+
+, then according to the upper powerdomain semantics, nothing else matters---it
+ might as well 
+\emph on
+always
+\emph default
+ return 
+\begin_inset Formula $\bot$
+\end_inset
+
+.
+ For this reason, the upper powerdomain is good for reasoning about total
+ correctness: if 
+\begin_inset Formula $\bot$
+\end_inset
+
+ is 
+\emph on
+not
+\emph default
+ a member of 
+\begin_inset Formula $xs$
+\end_inset
+
+, then you can be sure that 
+\begin_inset Formula $xs$
+\end_inset
+
+ denotes a computation that has no possibility of nontermination.
+\end_layout
+
+\begin_layout Subsection
+Lower powerdomain
+\end_layout
+
+\begin_layout Standard
+The lower powerdomain 
+\begin_inset Formula $\mathcal{P}^{\flat}(\alpha)$
+\end_inset
+
+ can also be defined similarly, by adding a different extra law:
+\begin_inset Formula \begin{equation}
+xs\sqsubseteq xs\cup^{\flat}ys\label{eq:lower-plus}\end{equation}
+
+\end_inset
+
+This law makes the upper powerdomain into a semilattice, where 
+\begin_inset Formula $xs\cup^{\flat}ys$
+\end_inset
+
+ is the join, or least upper bound, of 
+\begin_inset Formula $xs$
+\end_inset
+
+ and 
+\begin_inset Formula $ys$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Theorem
+\begin_inset LatexCommand label
+name "thm:mem-lower"
+
+\end_inset
+
+Let 
+\begin_inset Formula $xs$
+\end_inset
+
+ be a value in a lower powerdomain.
+ Then the set of members of 
+\begin_inset Formula $xs$
+\end_inset
+
+ is downward-closed.
+\end_layout
+
+\begin_layout Proof
+Similar to the proof of Theorem 
+\begin_inset LatexCommand ref
+reference "thm:mem-upper"
+
+\end_inset
+
+.
+ 
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+qed
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+An immediate consequence of this theorem is that in the lower powerdomain,
+ 
+\begin_inset Formula $\bot$
+\end_inset
+
+ is a member of everything.
+ Equivalently, 
+\begin_inset Formula $\{\bot\}^{\flat}$
+\end_inset
+
+ is an identity for the (
+\begin_inset Formula $\cup^{\flat}$
+\end_inset
+
+) operation.
+ In terms of nondeterministic computations, this means that the lower powerdomai
+n semantics ignores any nonterminating execution paths.
+ In contrast to the upper powerdomain, the lower powerdomain is better for
+ reasoning about partial correctness, where you want to verify that 
+\emph on
+if
+\emph default
+ a computation terminates, then its result will satisfy some property.
+\end_layout
+
+\begin_layout Subsection
+Visualizing powerdomains
+\end_layout
+
+\begin_layout Standard
+To help convey an intuition for the structure of the various kinds of powerdomai
+ns, this section includes diagrams of the powerdomain orderings over a few
+ different element types.
+ Fig.
+ 
+\begin_inset LatexCommand ref
+reference "fig:lifted2"
+
+\end_inset
+
+ shows all three powerdomains over a small flat domain, like the lifted
+ booleans.
+ Fig.
+ 
+\begin_inset LatexCommand ref
+reference "fig:lifted3"
+
+\end_inset
+
+ extends this to a slightly larger flat domain.
+ Fig.
+ 
+\begin_inset LatexCommand ref
+reference "fig:lattice4"
+
+\end_inset
+
+ extends this in a different way by adding a top value.
+\end_layout
+
+\begin_layout Standard
+Looking at Figs.
+ 
+\begin_inset LatexCommand ref
+reference "fig:lifted2"
+
+\end_inset
+
+ and 
+\begin_inset LatexCommand ref
+reference "fig:lifted3"
+
+\end_inset
+
+, some generalizations can be made about powerdomains over flat cpos.
+ The ordering on the lower powerdomain of any flat cpo is isomorphic to
+ the subset ordering on the corresponding powerset.
+ Also note that the lower powerdomain always has a greatest element, which
+ corresponds to the set including all possible return values.
+ In contrast, the upper powerdomain is almost like the lower powerdomain
+ flipped upside-down, except that the bottom element stays at the bottom;
+ the other singleton sets are maximal in this ordering.
+\end_layout
+
+\begin_layout Standard
+For the lifted two-element type, note that the convex powerdomain has the
+ structure of the lower powerdomain embedded inside it, but with a new value
+ (excluding 
+\begin_inset Formula $\bot$
+\end_inset
+
+) added above each old value.
+ The convex powerdomain of the lifted three-element type is not shown (due
+ to its size) but it is related to the lower powerdomain in the same way.
+\end_layout
+
+\begin_layout Standard
+The four-element lattice is interesting because due to its symmetry, it
+ clearly illustrates the duality between the upper and lower powerdomains.
+ The lower powerdomain is structured exactly like the upper powerdomain,
+ but with the order reversed.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Standard
+\align center
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+begin{tikzpicture}[xscale=0.9]
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U) at (0,0) {$
+\backslash
+bot$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A) at (-0.75,1) {$x$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B) at (0.75,1) {$y$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (A) -- (U) -- (B);
+\end_layout
+
+\begin_layout Standard
+
+  
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U1) at (3,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AB1) at (3,1) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A1) at (2,2) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B1) at (4,2) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U1) -- (AB1);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (A1) -- (AB1) -- (B1);
+\end_layout
+
+\begin_layout Standard
+
+  
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U2) at (6,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UA2) at (5,1) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UAB2) at (6,2) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UB2) at (7,1) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U2) -- (UA2) -- (UAB2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U2) -- (UB2) -- (UAB2);
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U3) at (10,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UA3) at (9,1) {$
+\backslash
+{
+\backslash
+bot,x
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UB3) at (11,1) {$
+\backslash
+{
+\backslash
+bot,y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UAB3) at (10,2) {$
+\backslash
+{
+\backslash
+bot,x,y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A3) at (8.7,2) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B3) at (11.3,2) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AB3) at (10,3) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U3) -- (UA3) -- (A3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U3) -- (UB3) -- (B3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UA3) -- (UAB3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UB3) -- (UAB3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UAB3) -- (AB3);
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Caption
+
+\begin_layout Standard
+\begin_inset LatexCommand label
+name "fig:lifted2"
+
+\end_inset
+
+Lifted two-element type, with upper, lower, and convex powerdomains
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Standard
+\align center
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+begin{tikzpicture}[xscale=1.2]
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U) at (0.75,0) {$
+\backslash
+bot$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A) at (0,1) {$x$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B) at (0.75,1) {$y$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (C) at (1.5,1) {$z$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U) -- (A);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U) -- (B);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U) -- (C);
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U1) at (4,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (ABC1) at (4,1) {$
+\backslash
+{x,y,z
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AB1) at (3,2) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (BC1) at (5,2) {$
+\backslash
+{y,z
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (CA1) at (4,2) {$
+\backslash
+{x,z
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A1) at (3,3) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B1) at (4,3) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (C1) at (5,3) {$
+\backslash
+{z
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U1) -- (ABC1);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (ABC1) -- (AB1) -- (A1) -- (CA1);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (ABC1) -- (BC1) -- (B1) -- (AB1);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (ABC1) -- (CA1) -- (C1) -- (BC1);
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U2) at (8,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UA2) at (7,1) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UB2) at (8,1) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UC2) at (9,1) {$
+\backslash
+{z
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UAB2) at (7,2) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UBC2) at (9,2) {$
+\backslash
+{y,z
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UCA2) at (8,2) {$
+\backslash
+{x,z
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UABC2) at (8,3) {$
+\backslash
+{x,y,z
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U2) -- (UA2) -- (UAB2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U2) -- (UB2) -- (UBC2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U2) -- (UC2) -- (UCA2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UA2) -- (UCA2) -- (UABC2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UB2) -- (UAB2) -- (UABC2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UC2) -- (UBC2) -- (UABC2);
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Caption
+
+\begin_layout Standard
+\begin_inset LatexCommand label
+name "fig:lifted3"
+
+\end_inset
+
+Lifted three-element type, with upper and lower powerdomains
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Standard
+\align center
+\begin_inset ERT
+status collapsed
+
+\begin_layout Standard
+
+
+\backslash
+begin{tikzpicture}[xscale=0.9]
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U) at (1.25,0) {$
+\backslash
+bot$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A) at (0.5,1) {$x$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B) at (2,1) {$y$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (T) at (1.25,2) {$
+\backslash
+top$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U) -- (A) -- (T) -- (B) -- (U);
+\end_layout
+
+\begin_layout Standard
+
+  
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U1) at (4,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AB1) at (4,1) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A1) at (3,2) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B1) at (5,2) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (T1) at (4,3) {$
+\backslash
+{
+\backslash
+top
+\backslash
+}^
+\backslash
+sharp$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U1) -- (AB1) -- (A1) -- (T1) -- (B1) -- (AB1);
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U2) at (7,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A2) at (6,1) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B2) at (8,1) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AB2) at (7,2) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (T2) at (7,3) {$
+\backslash
+{
+\backslash
+top
+\backslash
+}^
+\backslash
+flat$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (T2) -- (AB2) -- (B2) -- (U2) -- (A2) -- (AB2);
+\end_layout
+
+\begin_layout Standard
+
+  
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (U3) at (11,0) {$
+\backslash
+{
+\backslash
+bot
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UA3) at (10,0.8) {$
+\backslash
+{
+\backslash
+bot,x
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UB3) at (12,0.8) {$
+\backslash
+{
+\backslash
+bot,y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UAB3) at (11,1.6) {$
+\backslash
+{
+\backslash
+bot,x,y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (A3) at (9,2.4) {$
+\backslash
+{x
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (B3) at (13,2.4) {$
+\backslash
+{y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (UT3) at (10.3,2.4) {$
+\backslash
+{
+\backslash
+bot,
+\backslash
+top
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AB3) at (11.7,2.4) {$
+\backslash
+{x,y
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (ABT3) at (11,3.2) {$
+\backslash
+{x,y,
+\backslash
+top
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (AT3) at (10,4.0) {$
+\backslash
+{x,
+\backslash
+top
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (BT3) at (12,4.0) {$
+\backslash
+{y,
+\backslash
+top
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+node (T3) at (11,4.8) {$
+\backslash
+{
+\backslash
+top
+\backslash
+}^
+\backslash
+natural$};
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U3) -- (UA3) -- (UAB3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (U3) -- (UB3) -- (UAB3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UA3) -- (A3) -- (AT3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UB3) -- (B3) -- (BT3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UAB3) -- (UT3) -- (ABT3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (UAB3) -- (AB3) -- (ABT3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (ABT3) -- (AT3) -- (T3);
+\end_layout
+
+\begin_layout Standard
+
+  
+\backslash
+draw (ABT3) -- (BT3) -- (T3);
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{tikzpicture}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Caption
+
+\begin_layout Standard
+\begin_inset LatexCommand label
+name "fig:lattice4"
+
+\end_inset
+
+Four-element lattice, with upper, lower, and convex powerdomains
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+\begin_inset LatexCommand label
+name "sec:HOLCF-powerdomain-library"
+
+\end_inset
+
+HOLCF powerdomain library
+\end_layout
+
+\begin_layout Standard
+This section describes the user-visible aspects of the HOLCF powerdomain
+ library.
+ The implementation defines three new type constructors, one for each of
+ the three powerdomain varieties.
+ Each type has 
+\family typewriter
+unit
+\family default
+ and 
+\family typewriter
+plus
+\family default
+ constructors, and a monadic 
+\family typewriter
+bind
+\family default
+ operator.
+ Each type also has 
+\family typewriter
+map
+\family default
+ and 
+\family typewriter
+join
+\family default
+ operators, defined in terms of 
+\family typewriter
+unit
+\family default
+ and 
+\family typewriter
+bind
+\family default
+ in the same manner as Haskell's 
+\family typewriter
+liftM
+\family default
+ and 
+\family typewriter
+join
+\family default
+.
+ The full list of types and constants is shown in Fig.
+ 
+\begin_inset LatexCommand ref
+reference "fig:type-signatures"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The functions 
+\family typewriter
+convex_to_lower
+\family default
+ and 
+\family typewriter
+convex_to_upper
+\family default
+ are the mappings guaranteed to exist by the universal property of the convex
+ powerdomain; they preserve 
+\family typewriter
+unit
+\family default
+ and 
+\family typewriter
+plus
+\family default
+.
+ Note that instead of the full function space (
+\family typewriter
+=>
+\family default
+), all functions use the HOLCF continuous function space type (
+\family typewriter
+->
+\family default
+), indicating that they are continuous functions.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Standard
+\begin_inset ERT
+status open
+
+\begin_layout Standard
+
+
+\backslash
+begin{verbatim}
+\end_layout
+
+\begin_layout Standard
+
+typedef 'a upper_pd
+\end_layout
+
+\begin_layout Standard
+
+upper_unit :: 'a -> 'a upper_pd
+\end_layout
+
+\begin_layout Standard
+
+upper_plus :: 'a upper_pd -> 'a upper_pd -> 'a upper_pd
+\end_layout
+
+\begin_layout Standard
+
+upper_bind :: 'a upper_pd -> ('a -> 'b upper_pd) -> 'b upper_pd
+\end_layout
+
+\begin_layout Standard
+
+upper_map :: ('a -> 'b) -> 'a upper_pd -> 'b upper_pd
+\end_layout
+
+\begin_layout Standard
+
+upper_join :: 'a upper_pd upper_pd -> 'a upper_pd
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+typedef 'a lower_pd
+\end_layout
+
+\begin_layout Standard
+
+lower_unit :: 'a -> 'a lower_pd
+\end_layout
+
+\begin_layout Standard
+
+lower_plus :: 'a lower_pd -> 'a lower_pd -> 'a lower_pd
+\end_layout
+
+\begin_layout Standard
+
+lower_bind :: 'a lower_pd -> ('a -> 'b lower_pd) -> 'b lower_pd
+\end_layout
+
+\begin_layout Standard
+
+lower_map :: ('a -> 'b) -> 'a lower_pd -> 'b lower_pd
+\end_layout
+
+\begin_layout Standard
+
+lower_join :: 'a lower_pd lower_pd -> 'a lower_pd
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+
+typedef 'a convex_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_unit :: 'a -> 'a convex_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_plus :: 'a convex_pd -> 'a convex_pd -> 'a convex_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_bind :: 'a convex_pd -> ('a -> 'b convex_pd) -> 'b convex_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_map :: ('a -> 'b) -> 'a convex_pd -> 'b convex_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_join :: 'a convex_pd convex_pd -> 'a convex_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_to_upper :: 'a convex_pd -> 'a upper_pd
+\end_layout
+
+\begin_layout Standard
+
+convex_to_lower :: 'a convex_pd -> 'a lower_pd
+\end_layout
+
+\begin_layout Standard
+
+
+\backslash
+end{verbatim}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Caption
+
+\begin_layout Standard
+\begin_inset LatexCommand label
+name "fig:type-signatures"
+
+\end_inset
+
+Powerdomain types and constants defined in HOLCF
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For convenience, the library also provides set-style syntax for 
+\family typewriter
+unit
+\family default
+ and 
+\family typewriter
+plus
+\family default
+, similar to the notation used in this paper.
+\end_layout
+
+\begin_layout Standard
+Along with the definitions of types and constants, the library provides
+ a significant body of lemmas.
+ Each powerdomain type has an induction rule in terms of 
+\family typewriter
+unit
+\family default
+ and 
+\family typewriter
+plus
+\family default
+.
+ Rules about injectivity, strictness, compactness, and ordering are provided
+ for the constructors.
+ Also, the functor and monad laws are provided as lemmas.
+\end_layout
+
+\begin_layout Subsection
+Bifinite type class
+\end_layout
+
+\begin_layout Standard
+HOLCF uses Isabelle's axiomatic type class mechanism 
+\begin_inset LatexCommand cite
+key "wenzel97typeclass"
+
+\end_inset
+
+ to represent different kinds of domains.
+ The main axiomatic type classes in HOLCF are 
+\family typewriter
+cpo
+\family default
+ (chain-complete partial orders) and 
+\family typewriter
+pcpo
+\family default
+ (pointed cpos).
+ Unfortunately, the powerdomain constructions do not work over arbitrary
+ cpos; they need some additional structure.
+ In order to formalize powerdomains in HOLCF, it was necessary to add a
+ new axiomatic class 
+\family typewriter
+bifinite
+\family default
+, which is a subclass of 
+\family typewriter
+pcpo
+\family default
+.
+ I will have more to say about class 
+\family typewriter
+bifinite
+\family default
+ in Section 
+\begin_inset LatexCommand ref
+reference "sec:Implementation"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+As far as a user of the library is concerned, it does not matter how class
+ 
+\family typewriter
+bifinite
+\family default
+ is defined; the important thing is that it should be preserved by all of
+ type constructors that the user works with.
+ In the current version of Isabelle, instances are provided for all type
+ constructors defined in the HOLCF library: continuous function space, Cartesian
+ product, strict product, strict sum, lifted cpos, and all three varieties
+ of powerdomains.
+ Flat domains built from countable HOL types are instances of 
+\family typewriter
+bifinite
+\family default
+ as well.
+\end_layout
+
+\begin_layout Standard
+A known problem is that the current implementation of the domain package
+ does not generate instances of class 
+\family typewriter
+bifinite
+\family default
+ for new types.
+ In the current version of HOLCF, if a user wants to use a domain package--defin
+ed type with powerdomains, it will be necessary to manually prove that the
+ type is an instance of class 
+\family typewriter
+bifinite
+\family default
+.
+ Updating the domain package to work with the 
+\family typewriter
+bifinite
+\family default
+ class is planned as future work.
+\end_layout
+
+\begin_layout Subsection
+Automation
+\end_layout
+
+\begin_layout Standard
+To facilitate reasoning with powerdomains, the library provides various
+ sets of rewrite rules that are designed to work well together.
+\end_layout
+
+\begin_layout Subsubsection
+ACI normalization.
+\end_layout
+
+\begin_layout Standard
+Isabelle's simplifier is set up to handle permutative rewrite rules.
+ For any associative-commutative operator, there is a set of three permutative
+ rewrite rules that can convert any expression built from the operator into
+ a normal form (grouped to the right, with terms sorted according to some
+ term-ordering).
+\begin_inset LatexCommand cite
+key "baader1998"
+
+\end_inset
+
+ Two of the AC rewrites are simply the associativity and commutativity rules.
+ The third is the left-commutativity rule.
+ For ACI rewriting, we need a total of five rules: the three AC rewrites,
+ plus the idempotency rule, and also (analogous to left-commutativity) left-idem
+potency.
+\begin_inset Formula \begin{eqnarray}
+(xs\cup ys)\cup zs & = & xs\cup(ys\cup zs)\nonumber \\
+ys\cup xs & = & xs\cup ys\nonumber \\
+ys\cup(xs\cup zs) & = & xs\cup(ys\cup zs)\label{eq:plus-aci}\\
+xs\cup xs & = & xs\nonumber \\
+xs\cup(xs\cup ys) & = & xs\cup ys\nonumber \end{eqnarray}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Permutative rewriting using the ACI rules results in a normal form where
+ expressions are nested to the right, and the terms are in sorted order,
+ with no exact duplicates.
+ In HOLCF, this normalization can be accomplished for the convex powerdomains
+ by invoking 
+\family typewriter
+(simp add: convex_plus_aci)
+\family default
+.
+ Similarly, 
+\family typewriter
+upper_plus_aci
+\family default
+ and 
+\family typewriter
+lower_plus_aci
+\family default
+ may be used with upper and lower powerdomains, respectively.
+\end_layout
+
+\begin_layout Subsubsection
+Solving inequalities.
+\end_layout
+
+\begin_layout Standard
+A common subgoal in a proof might be to show that one powerdomain expression
+ approximates another.
+ For each variety of powerdomain, there is a set of rewrites that can be
+ used to automatically reduce an inequality on powerdomains down to inequalities
+ on the underlying type.
+\begin_inset Formula \begin{eqnarray}
+\{x\}^{\sharp}\sqsubseteq\{y\}^{\sharp} & \iff & x\sqsubseteq y\nonumber \\
+xs\sqsubseteq(ys\cup^{\sharp}zs) & \iff & (xs\sqsubseteq ys)\wedge(xs\sqsubseteq zs)\label{eq:upper-less}\\
+(xs\cup^{\sharp}ys)\sqsubseteq\{z\}^{\sharp} & \iff & (xs\sqsubseteq\{z\}^{\sharp})\vee(ys\sqsubseteq\{z\}^{\sharp})\nonumber \end{eqnarray}
+
+\end_inset
+
+
+\begin_inset Formula \begin{eqnarray}
+\{x\}^{\flat}\sqsubseteq\{y\}^{\flat} & \iff & x\sqsubseteq y\nonumber \\
+(xs\cup^{\flat}ys)\sqsubseteq zs & \iff & (xs\sqsubseteq zs)\wedge(ys\sqsubseteq zs)\label{eq:lower-less}\\
+\{x\}^{\flat}\sqsubseteq(ys\cup^{\flat}zs) & \iff & (\{x\}^{\flat}\sqsubseteq ys)\vee(\{x\}^{\flat}\sqsubseteq zs)\nonumber \end{eqnarray}
+
+\end_inset
+
+
+\begin_inset Formula \begin{eqnarray}
+\{x\}^{\natural}\sqsubseteq\{y\}^{\natural} & \iff & x\sqsubseteq y\nonumber \\
+\{x\}^{\natural}\sqsubseteq(ys\cup^{\natural}zs) & \iff & (\{x\}^{\natural}\sqsubseteq ys)\wedge(\{x\}^{\natural}\sqsubseteq zs)\label{eq:convex-less}\\
+(xs\cup^{\natural}ys)\sqsubseteq\{z\}^{\natural} & \iff & (xs\sqsubseteq\{z\}^{\natural})\wedge(ys\sqsubseteq\{z\}^{\natural})\nonumber \end{eqnarray}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For the upper and lower powerdomains, each has a set of three rewrite rules
+ that covers all cases of comparisons.
+ For example, invoking 
+\family typewriter
+(simp add: upper_pd_less_simps)
+\family default
+ will rewrite 
+\begin_inset Formula $\{x,y\}^{\sharp}\sqsubseteq\{y,z\}^{\sharp}$
+\end_inset
+
+ to 
+\begin_inset Formula $x\sqsubseteq z\vee y\sqsubseteq z$
+\end_inset
+
+, using the rules in Eq.
+ (
+\begin_inset LatexCommand ref
+reference "eq:upper-less"
+
+\end_inset
+
+).
+ Similarly, 
+\family typewriter
+(simp add: lower_pd_less_simps)
+\family default
+ uses the rules in Eq.
+ (
+\begin_inset LatexCommand ref
+reference "eq:lower-less"
+
+\end_inset
+
+) to simplify inequalities on lower powerdomains.
+\end_layout
+
+\begin_layout Standard
+For the convex powerdomain, the three rules in Eq.
+ (
+\begin_inset LatexCommand ref
+reference "eq:convex-less"
+
+\end_inset
+
+) are incomplete: They do not cover the case of 
+\begin_inset Formula $(xs\cup^{\natural}ys)\sqsubseteq(zs\cup^{\natural}ws)$
+\end_inset
+
+.
+ To handle this case, we will take advantage of the coercions from the convex
+ powerdomain to the upper and lower powerdomains, along with the following
+ ordering property:
+\begin_inset Formula \begin{eqnarray}
+xs\sqsubseteq ys & \Longleftrightarrow & \mbox{to\_upper}(xs)\sqsubseteq\mbox{to\_upper}(ys)\wedge\mbox{to\_lower}(xs)\sqsubseteq\mbox{to\_lower}(ys)\label{eq:convex-less2}\end{eqnarray}
+
+\end_inset
+
+The rule set 
+\family typewriter
+convex_pd_less_simps
+\family default
+ includes all rules from Eqs.
+ (
+\begin_inset LatexCommand ref
+reference "eq:upper-less"
+
+\end_inset
+
+)--(
+\begin_inset LatexCommand ref
+reference "eq:convex-less"
+
+\end_inset
+
+), and a suitably instantiated Eq.
+ (
+\begin_inset LatexCommand ref
+reference "eq:convex-less2"
+
+\end_inset
+
+) to cover the missing case.
+\end_layout
+
+\begin_layout Subsubsection
+Using inequalities to solve non-trivial equalities.
+\end_layout
+
+\begin_layout Standard
+The ACI rewriting can take care of many equalities between powerdomain expressio
+ns, but the inequality rules can actually solve more.
+ For example, using the assumptions 
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+ and 
+\begin_inset Formula $y\sqsubseteq z$
+\end_inset
+
+, we will prove that 
+\begin_inset Formula $\{x,y,z\}^{\natural}=\{x,z\}^{\natural}$
+\end_inset
+
+.
+ By antisymmetry, we can rewrite this to the conjunction 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+
+\begin_inset Formula $(\{x,y,z\}^{\natural}\sqsubseteq\{x,z\}^{\natural})\wedge(\{x,z\}^{\natural}\sqsubseteq\{x,y,z\}^{\natural})$
+\end_inset
+
+.
+ Next, we can use the method 
+\family typewriter
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\noun default
+\color inherit
+(simp add: convex_pd_less_simps)
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+, and this subgoal reduces to 
+\begin_inset Formula $(y\sqsubseteq x\vee y\sqsubseteq z)\wedge(x\sqsubseteq y\vee z\sqsubseteq y)$
+\end_inset
+
+.
+ Finally, this is easily discharged using the assumptions 
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\noun default
+\color inherit
+
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+ and 
+\begin_inset Formula $y\sqsubseteq z$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Section
+\begin_inset LatexCommand label
+name "sec:Implementation"
+
+\end_inset
+
+Implementation
+\end_layout
+
+\begin_layout Standard
+The development of powerdomains in HOLCF follows the ideal completion constructi
+on presented by Gunter and Scott in 
+\begin_inset LatexCommand cite
+after "\\S5.2"
+key "gunter90semantic"
+
+\end_inset
+
+.
+ Some alternative constructions are also given by Abramsky and Jung in 
+\begin_inset LatexCommand cite
+after "\\S6.2"
+key "abramsky94domain"
+
+\end_inset
+
+; the ideal completion method was chosen because it required the formalization
+ of a minimal amount of supporting theories, and it offered good opportunities
+ for proof reuse.
+\end_layout
+
+\begin_layout Subsection
+Class of bifinite domains
+\end_layout
+
+\begin_layout Standard
+The powerdomain construction used in HOLCF makes use of an alternative represent
+ation of domains, where we just consider the set of compact (i.e.
+ finite) values, rather than the whole domain.
+\begin_inset LatexCommand cite
+after "\\S2.2.6"
+key "abramsky94domain"
+
+\end_inset
+
+ For this representation to work, we restrict our attention to 
+\emph on
+algebraic
+\emph default
+ cpos, where every value can be expressed as the limit of its compact approximan
+ts.
+ This means that in an algebraic cpo the set of compact elements, together
+ with the domain ordering on them, fully represents the entire domain.
+ We say that the set of compact elements forms a 
+\emph on
+basis
+\emph default
+ for the domain, and the entire domain is a 
+\emph on
+completion
+\emph default
+ of the basis.
+\end_layout
+
+\begin_layout Standard
+Most of HOLCF has been designed using the type class 
+\family typewriter
+pcpo
+\family default
+ of pointed complete partial orders.
+ However, 
+\family typewriter
+pcpo
+\family default
+ types are not algebraic in general, and the ideal completion construction
+ only works with algebraic cpos.
+ Therefore it was necessary to add a new type class to HOLCF.
+\end_layout
+
+\begin_layout Standard
+The class 
+\family typewriter
+bifinite
+\family default
+ is defined as follows.
+ It fixes a sequence of functions 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+
+\begin_inset Formula $\mbox{approx}_{n}$
+\end_inset
+
+
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\noun default
+\color inherit
+, and assumes four class axioms:
+\end_layout
+
+\begin_layout Enumerate
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+The 
+\begin_inset Formula $\mbox{approx}_{n}$
+\end_inset
+
+
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\noun default
+\color inherit
+ form a chain
+\end_layout
+
+\begin_layout Enumerate
+The least upper bound 
+\begin_inset Formula $(\bigsqcup_{n}\mbox{approx}_{n})$
+\end_inset
+
+ is the identity function
+\end_layout
+
+\begin_layout Enumerate
+Each 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+
+\begin_inset Formula $\mbox{approx}_{n}$
+\end_inset
+
+ is idempotent
+\end_layout
+
+\begin_layout Enumerate
+Each 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+
+\begin_inset Formula $\mbox{approx}_{n}$
+\end_inset
+
+ has finite range
+\end_layout
+
+\begin_layout Standard
+The HOLCF 
+\family typewriter
+bifinite
+\family default
+ class actually corresponds to the 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset Formula $\omega$
+\end_inset
+
+-bifinite
+\begin_inset Quotes erd
+\end_inset
+
+ domains, which have a countable basis; the usual definition of 
+\begin_inset Quotes eld
+\end_inset
+
+bifinite
+\begin_inset Quotes erd
+\end_inset
+
+ 
+\begin_inset LatexCommand cite
+after "\\S4.2"
+key "abramsky94domain"
+
+\end_inset
+
+ has no such restriction, and would be equivalent to allowing any directed
+ set of approx functions, rather than a countable chain.
+ Bifinite domains were originally defined by Plotkin as limits of expanding
+ sequences of finite posets, who used the name 
+\begin_inset Quotes eld
+\end_inset
+
+SFP domain
+\begin_inset Quotes erd
+\end_inset
+
+.
+\begin_inset LatexCommand cite
+key "plotkin76powerdomain"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Of all the various classes of domains to choose from, the definition of
+ 
+\family typewriter
+bifinite
+\family default
+ was chosen for the following reasons:
+\end_layout
+
+\begin_layout Itemize
+All 
+\family typewriter
+bifinite
+\family default
+ types are algebraic: Every 
+\family typewriter
+bifinite
+\family default
+ type has a countable basis of compact elements, given by the union of the
+ ranges of the approx functions.
+\end_layout
+
+\begin_layout Itemize
+In 
+\family typewriter
+bifinite
+\family default
+ types, every directed set contains a chain with the same limit.
+ This means that in class 
+\family typewriter
+bifinite
+\family default
+, the notions of directed-continuity and chain-continuity coincide.
+ This is important for fitting the ideal completion construction (which
+ uses directed sets) into HOLCF (which defines everything with chains).
+\end_layout
+
+\begin_layout Itemize
+The 
+\family typewriter
+bifinite
+\family default
+ class is closed under all type constructors used in HOLCF, including the
+ convex powerdomain.
+\end_layout
+
+\begin_layout Subsection
+Ideal completion
+\end_layout
+
+\begin_layout Standard
+Given a basis 
+\begin_inset Formula $\left\langle B,\preceq\right\rangle $
+\end_inset
+
+, we can reconstruct the full algebraic cpo.
+ The standard process for doing this is called ideal completion, and it
+ is done by considering the set of ideals over the basis:
+\end_layout
+
+\begin_layout Definition
+A set 
+\begin_inset Formula $S$
+\end_inset
+
+ is an 
+\emph on
+ideal
+\emph default
+ with respect to partial preorder relation 
+\begin_inset Formula $(\preceq)$
+\end_inset
+
+ if it has the following properties:
+\end_layout
+
+\begin_deeper
+\begin_layout Itemize
+\begin_inset Formula $S$
+\end_inset
+
+ is nonempty: 
+\begin_inset Formula $\exists x.\, x\in S$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Formula $S$
+\end_inset
+
+ is downward-closed: 
+\begin_inset Formula $\forall x\, y.\, x\preceq y\longrightarrow y\in S\longrightarrow x\in S$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Formula $S$
+\end_inset
+
+ is directed (i.e.
+ has an upper bound for any pair of elements):
+\newline
+ 
+\begin_inset Formula $\forall x\, y.\, x\in S\longrightarrow y\in S\longrightarrow(\exists z.\, z\in S\wedge x\preceq z\wedge y\preceq z)$
+\end_inset
+
+
+\end_layout
+
+\end_deeper
+\begin_layout Definition
+A 
+\emph on
+principal
+\emph default
+ 
+\emph on
+ideal
+\emph default
+ is an ideal of the form 
+\begin_inset Formula $\{y.\, y\preceq x\}$
+\end_inset
+
+ for some 
+\begin_inset Formula $x$
+\end_inset
+
+, denoted 
+\begin_inset Formula $\downarrow\! x$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The set of all ideals over 
+\begin_inset Formula $\left\langle B,\preceq\right\rangle $
+\end_inset
+
+ is denoted 
+\begin_inset Formula $\mbox{Idl}(B)$
+\end_inset
+
+; when ordered by subset inclusion, 
+\begin_inset Formula $\mbox{Idl}(B)$
+\end_inset
+
+ forms an algebraic cpo.
+ The compact elements of 
+\begin_inset Formula $\mbox{Idl}(B)$
+\end_inset
+
+ are exactly those represented by principal ideals.
+\end_layout
+
+\begin_layout Standard
+Note that the relation 
+\begin_inset Formula $(\preceq)$
+\end_inset
+
+ does not need to be antisymmetric.
+ For 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $y$
+\end_inset
+
+ that are equivalent (that is, both 
+\begin_inset Formula $x\preceq y$
+\end_inset
+
+ and 
+\begin_inset Formula $y\preceq x$
+\end_inset
+
+) the principal ideals 
+\begin_inset Formula $\downarrow\! x$
+\end_inset
+
+ and 
+\begin_inset Formula $\downarrow\! y$
+\end_inset
+
+ are equal.
+ This means that the ideal completion construction automatically takes care
+ of quotienting by the equivalence induced by 
+\begin_inset Formula $(\preceq)$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The ideal completion construction is formalized in HOLCF using Isabelle's
+ locale mechanism.
+\begin_inset LatexCommand cite
+key "kammuller99locales"
+
+\end_inset
+
+ The library defines a locale 
+\family typewriter
+preorder
+\family default
+ that fixes a type corresponding to the basis 
+\begin_inset Formula $B$
+\end_inset
+
+, and a preorder relation on that type; within this locale, a predicate
+ 
+\family typewriter
+ideal
+\family default
+ is defined.
+ Within the 
+\family typewriter
+preorder
+\family default
+ locale, the main lemma proved is that the union of a chain of ideals is
+ itself an ideal---which shows that the ideal completion is a cpo.
+\end_layout
+
+\begin_layout Standard
+All three of the powerdomains in the library are defined by ideal completion.
+ For an basis, the library defines a type 
+\family typewriter
+'a pd_basis
+\family default
+, which consists of nonempty, finite sets of compact elements of type 
+\family typewriter
+'a
+\family default
+.
+ Following 
+\begin_inset LatexCommand cite
+after "\\S5.2"
+key "gunter90semantic"
+
+\end_inset
+
+, each of the three powerdomains is defined as an ideal completion over
+ the same basis, but each uses a different preorder relation:
+\begin_inset Formula \begin{eqnarray}
+a\preceq^{\flat}b & \iff & \forall x\in a.\ \exists y\in b.\ x\sqsubseteq y\nonumber \\
+a\preceq^{\sharp}b & \iff & \forall y\in b.\ \exists x\in a.\ x\sqsubseteq y\label{eq:preorders}\\
+a\preceq^{\natural}b & \iff & a\preceq^{\flat}b\wedge a\preceq^{\sharp}b\nonumber \end{eqnarray}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Continuous extensions of functions
+\end_layout
+
+\begin_layout Standard
+A continuous function on an algebraic cpo is completely determined by its
+ action on compact elements.
+ This suggests a method for defining continuous functions over ideal completions
+: First, define a function from the basis 
+\begin_inset Formula $B$
+\end_inset
+
+ to a cpo 
+\begin_inset Formula $C$
+\end_inset
+
+ such that 
+\begin_inset Formula $f$
+\end_inset
+
+ is monotone, i.e.
+ 
+\begin_inset Formula $x\preceq y$
+\end_inset
+
+ implies 
+\begin_inset Formula $f(x)\sqsubseteq f(y)$
+\end_inset
+
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+.
+ Then there exists a unique function
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\noun default
+\color inherit
+ 
+\begin_inset Formula $\hat{f}:\mbox{Idl}(B)\rightarrow C$
+\end_inset
+
+ that agrees with 
+\begin_inset Formula $f$
+\end_inset
+
+ on principal ideals, i.e.
+ for all 
+\begin_inset Formula $x$
+\end_inset
+
+, 
+\begin_inset Formula $\hat{f}(\downarrow\! x)=f(x)$
+\end_inset
+
+.
+ We say that 
+\begin_inset Formula $\widehat{f}$
+\end_inset
+
+ is the 
+\emph on
+continuous extension
+\emph default
+ of 
+\begin_inset Formula $f$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+On top of the 
+\family typewriter
+preorder
+\family default
+ locale, HOLCF defines another locale 
+\family typewriter
+ideal_completion
+\family default
+ which fixes a second type corresponding to 
+\begin_inset Formula $\mbox{Idl}(B)$
+\end_inset
+
+.
+ It also fixes a function 
+\family typewriter
+principal
+\family default
+ of type 
+\begin_inset Formula $B\rightarrow\mbox{Idl}(B)$
+\end_inset
+
+.
+ Within this locale, a function 
+\family typewriter
+basis_fun
+\family default
+ is defined, which takes a monotone function 
+\begin_inset Formula $f$
+\end_inset
+
+ as an argument, and returns the continuous extension 
+\begin_inset Formula $\widehat{f}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The continuous extension is defined by mapping the function 
+\begin_inset Formula $f$
+\end_inset
+
+ over the input ideal, and then taking the least upper bound of the resulting
+ directed set: 
+\begin_inset Formula $\widehat{f}(S)=\bigsqcup_{x\in S}f(x)$
+\end_inset
+
+.
+ Ordinarily, the result type 
+\begin_inset Formula $C$
+\end_inset
+
+ would need to be a directed-complete partial order to ensure that this
+ least upper bound exists; however, the HOLCF library uses a different method
+ which allows 
+\begin_inset Formula $C$
+\end_inset
+
+ to be any chain-complete partial order.
+\end_layout
+
+\begin_layout Standard
+HOLCF defines a third locale 
+\family typewriter
+basis_take
+\family default
+, which fixes a chain of 
+\family typewriter
+take
+\family default
+ functions over the basis elements---it is like a version of the 
+\family typewriter
+bifinite
+\family default
+ class for bases.
+ The 
+\family typewriter
+basis_take
+\family default
+ locale ensures that the ideal completion 
+\begin_inset Formula $\mbox{Idl}(B)$
+\end_inset
+
+ is a bifinite domain.
+ It is also used with the definition of 
+\family typewriter
+basis_fun
+\family default
+ to construct a chain with the same limit as the directed set 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+
+\begin_inset Formula $\bigsqcup_{x\in S}f(x)$
+\end_inset
+
+, which allows 
+\begin_inset Formula $C$
+\end_inset
+
+ to be an arbitrary chain-cpo.
+\end_layout
+
+\begin_layout Standard
+The 
+\family typewriter
+basis_fun
+\family default
+ combinator is used to define the powerdomain constructors 
+\family typewriter
+unit
+\family default
+ and 
+\family typewriter
+plus
+\family default
+ in terms of the singleton and union operations on the 
+\family typewriter
+pd_basis
+\family default
+ type.
+ The 
+\family typewriter
+bind
+\family default
+ operators are also defined using 
+\family typewriter
+basis_fun
+\family default
+, in terms of a finite-set fold operation on 
+\family typewriter
+pd_basis
+\family default
+.
+ Finally, to prove the 
+\family typewriter
+bifinite
+\family default
+ class instance, the approx functions are also defined with 
+\family typewriter
+basis_fun
+\family default
+, in terms of the 
+\family typewriter
+take
+\family default
+ functions on 
+\family typewriter
+pd_basis
+\family default
+.
+\end_layout
+
+\begin_layout Subsection
+Transferring properties to the completed domain
+\end_layout
+
+\begin_layout Standard
+Once the powerdomain types are defined using ideal completion, with operations
+ defined by continuous extension, the final step is to prove the relevant
+ lemmas.
+ 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+For example, consider the lower powerdomain law 
+\begin_inset Formula $xs\sqsubseteq xs\cup^{\flat}ys$
+\end_inset
+
+.
+ In the case where 
+\begin_inset Formula $xs$
+\end_inset
+
+ and 
+\begin_inset Formula $ys$
+\end_inset
+
+ are both compact (i.e.
+ represented by principal ideals) the proof follows easily from the definitions.
+ Since 
+\begin_inset Formula $xs\sqsubseteq xs\cup^{\flat}ys$
+\end_inset
+
+ is an admissible predicate on both 
+\begin_inset Formula $xs$
+\end_inset
+
+ and 
+\begin_inset Formula $ys$
+\end_inset
+
+, this is in fact sufficient to show that it holds for all 
+\begin_inset Formula $xs$
+\end_inset
+
+ and 
+\begin_inset Formula $ys$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+Other properties are more tricky to transfer.
+ For example, consider the rule 
+\begin_inset Formula $\{x\}^{\natural}\sqsubseteq\{y\}^{\natural}\Longrightarrow x\sqsubseteq y$
+\end_inset
+
+.
+ As before, this property is easy to prove for compact 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $y$
+\end_inset
+
+.
+ However, we cannot immediately infer that it holds for all 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $y$
+\end_inset
+
+, since (because of the implication) this is not an admissible predicate.
+\end_layout
+
+\begin_layout Standard
+The proof of 
+\begin_inset Formula $\{x\}^{\natural}\sqsubseteq\{y\}^{\natural}\Longrightarrow x\sqsubseteq y$
+\end_inset
+
+ requires a few extra steps, making use of the approx functions from the
+ 
+\family typewriter
+bifinite
+\family default
+ class: To prove 
+\begin_inset Formula $x\sqsubseteq y$
+\end_inset
+
+, it will be sufficient to show that for all 
+\begin_inset Formula $n$
+\end_inset
+
+, 
+\begin_inset Formula $\mbox{approx}_{n}x\sqsubseteq\mbox{approx}_{n}y$
+\end_inset
+
+.
+ Now, from 
+\begin_inset Formula $\{x\}^{\natural}\sqsubseteq\{y\}^{\natural}$
+\end_inset
+
+ we have 
+\begin_inset Formula $\mbox{approx}_{n}\{x\}^{\natural}\sqsubseteq\mbox{approx}_{n}\{y\}^{\natural}$
+\end_inset
+
+, by monotonicity; then from the definition of approx on the convex powerdomain,
+ this simplifies to 
+\begin_inset Formula $\{\mbox{approx}_{n}x\}^{\natural}\sqsubseteq\{\mbox{approx}_{n}y\}^{\natural}$
+\end_inset
+
+.
+ Finally, since 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\noun off
+\color none
+
+\begin_inset Formula $\mbox{approx}_{n}x$
+\end_inset
+
+ and 
+\begin_inset Formula $\mbox{approx}_{n}y$
+\end_inset
+
+ are compact, we can easily show that 
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\bar default
+\noun default
+\color inherit
+
+\begin_inset Formula $\mbox{approx}_{n}x\sqsubseteq\mbox{approx}_{n}y$
+\end_inset
+
+.
+ All of the rules listed in Eqs.
+ (
+\begin_inset LatexCommand ref
+reference "eq:upper-less"
+
+\end_inset
+
+)--(
+\begin_inset LatexCommand ref
+reference "eq:convex-less2"
+
+\end_inset
+
+) use a similar proof.
+\end_layout
+
+\begin_layout Section
+Related work
+\end_layout
+
+\begin_layout Standard
+There are several theorem prover formalizations of domain theory in existence.
+ The current development is built on top of HOLCF, originally implemented
+ by Regensburger, and later extended by many others.
+\begin_inset LatexCommand cite
+key "regensburger95holcf,MuellerNvOS99"
+
+\end_inset
+
+ HOLCF does not formalize very many different classes of domains; most concepts
+ are defined in terms of pointed chain-complete partial orders and chain-continu
+ity, which is the minimum amount of structure required to define a fixed-point
+ combinator.
+ It is intended to be used as a library for users to define datatypes and
+ recursive functions and algorithms on them.
+\end_layout
+
+\begin_layout Standard
+In the mid-1990s a group from the University of Ulm formalized parts of
+ domain theory in PVS.
+\begin_inset LatexCommand cite
+key "BDvH+96"
+
+\end_inset
+
+ Its design goals appear to be similar to HOLCF---it includes just enough
+ of domain theory to formalize fixed-points and fixed-point induction.
+\end_layout
+
+\begin_layout Standard
+A formalization of domain theory with rather different goals is 
+\begin_inset Quotes eld
+\end_inset
+
+Elements of Domain Theory
+\begin_inset Quotes erd
+\end_inset
+
+, implemented in Coq in the 1990s by Kahn.
+ It is based on the definitions and lemmas from 
+\begin_inset LatexCommand cite
+key "kahn93concretedomains"
+
+\end_inset
+
+.
+ This development defines several classes of domains, including directed-complet
+e partial orders, omega-algebraic cpos, and bounded-complete domains.
+ However, it does not define any type constructors.
+ In contrast to HOLCF, it does not appear to be application-oriented; it
+ seems the main intent was to formalize the textbook-style definitions and
+ lemmas from the paper.
+\end_layout
+
+\begin_layout Standard
+Other formalizations use a different logic to ensure that all functions
+ are continuous by construction, such as the LCF system by Paulson.
+\begin_inset LatexCommand cite
+key "paulson87lcf"
+
+\end_inset
+
+ Another interesting approach is taken by Reus with his development of synthetic
+ domain theory in LEGO.
+\begin_inset LatexCommand cite
+key "reus96synthetic"
+
+\end_inset
+
+ Instead of defining classes of domains in terms of a domain ordering, it
+ starts by introducing a 
+\emph on
+subobject
+\emph default
+ 
+\emph on
+classifier
+\emph default
+, which is characterized by a collection of axioms.
+ The soundness of the construction is justified by a separate model.
+\end_layout
+
+\begin_layout Standard
+Relevant uses of powerdomains include modeling interleaved and parallel
+ computation.
+ Papaspyrou uses the convex powerdomain, together with the state and resumption
+ monad transformers, to model impure languages with unspecified evaluation
+ order.
+\begin_inset LatexCommand cite
+key "papaspyrou00study"
+
+\end_inset
+
+ Along similar lines, Thiemann used a type of state monad built on top of
+ powerdomains to reason about concurrent computations.
+\begin_inset LatexCommand cite
+key "thiemann95towards"
+
+\end_inset
+
+ The monad transformers used in these works, specifically the resumption
+ monad transformer, have been studied in HOLCF by Huffman, et al.
+\begin_inset LatexCommand cite
+key "huffman05axiomatic"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Conclusion and future work
+\end_layout
+
+\begin_layout Standard
+The powerdomain library described here is included as part of Isabelle2008
+ theorem prover.
+ It can already be used to prove properties of simple nondeterministic algorithm
+s, with automation for certain kinds of subgoals.
+ Future work will focus on better integration with the HOLCF domain package:
+ Bifinite class instances must be generated for all new datatypes.
+ Also, the domain package needs to be extended to allow recursive type definitio
+ns involving powerdomains---this will enable the use of powerdomains for
+ modeling parallel computation and concurrency.
+\end_layout
+
+\begin_layout Standard
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset LatexCommand bibtex
+options "plain"
+bibfiles "tphols08"
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document

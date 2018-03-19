@@ -1,0 +1,385 @@
+\documentclass[portrait]{sciposter}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{multicol}
+\usepackage{sectionbox}
+\usepackage[english]{babel}
+%\usepackage{fancybullets}
+%\usepackage{other packages you may want to use}
+\usepackage{tikz}
+\usetikzlibrary{snakes}
+\usetikzlibrary{arrows}
+\usetikzlibrary{shapes}
+
+%\definecolor{BoxCol}{rgb}{0.9,0.9,0.9}
+% uncomment for grey background to \section boxes 
+% for use with default option boxedsections
+
+%\definecolor{BoxCol}{rgb}{0.9,0.9,1}
+% uncomment for light blue background to \section boxes 
+% for use with default option boxedsections
+
+%\definecolor{SectionCol}{rgb}{0,0,0.5}
+% uncomment for dark blue \section text 
+
+%sciposter: set large font for section headings
+\renewcommand{\sectionsize}{\Large}
+
+%multicols: no rule between columns
+\setlength\columnseprule{0pt}
+
+
+\title{Reasoning with Powerdomains in Isabelle/HOLCF}
+
+% Note: only give author names, not institute
+\author{Brian Huffman}
+ 
+% insert correct institute name
+\institute{Department of Computer Science,\\
+  Portland State University, Portland, Oregon}
+
+\email{brianh@cs.pdx.edu}  % shows author email address below institute
+
+%\date is unused by the current \maketitle
+
+% The following commands can be used to alter the default logo settings
+%\leftlogo[0.9]{chenille}{  % defines logo to left of title (with scale factor)
+\leftlogo[2.0]{psulogo}
+\norightlogo
+%\rightlogo[0.52]{RuGlogo}  % same but on right
+
+% NOTE: This will require presence of files logoWenI.png and RuGlogo.png, 
+% or other supported format in the current directory  
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Begin of Document
+
+\begin{document}
+
+%define conference poster is presented at (appears as footer)
+\conference{21st International Conference on Theorem Proving in Higher Order Logics, Montr\'eal, Qu\'ebec, Canada, 18--21 August 2008}
+
+\maketitle
+
+%%% Begin of Multicols-Enviroment
+\begin{multicols}{3}
+
+%%% Abstract
+\begin{abstract}
+\begin{sectionbox}{}
+\begin{itemize}
+\item First fully-mechanized formalization of powerdomains
+\item Implemented in HOLCF logic of domain theory, in the\\ Isabelle theorem prover
+\item Library hides complicated implementation details
+\item Proof automation for solving equalities and inequalities
+\end{itemize}
+\end{sectionbox}
+\end{abstract}
+
+%%% -------------------------------------------------------------------------
+\section{Introduction}
+\begin{itemize}
+\item Powerdomains are a domain-theoretic analog of powersets, which were designed for reasoning about the semantics of nondeterministic programs.
+\item A powerdomain provides all of the operations of a monad. In addition, it provides a binary operation for making a nondeterministic choice.
+\item As part of domain theory, we can freely combine nondeterminism with higher-order functions and arbitrary recursion.
+\end{itemize}
+
+%%% -------------------------------------------------------------------------
+\section{Lists for Nondeterminism}
+
+In Haskell, the \textbf{lazy list monad} is often used to model nondeterministic computations. The \textbf{append} function models nondeterministic choice.
+
+\begin{verbatim}
+incdec :: Int -> [Int]
+incdec x = return (x+1) ++ return (x-1)
+-- increment OR decrement the argument x
+\end{verbatim}
+
+Lists are useful because they are \textbf{executable}. But they are not a good \textbf{denotational model for nondeterminism}, for several reasons:
+
+\begin{itemize}
+\item \textbf{Append is not commutative.} The following program produces the same set of results as \texttt{incdec}; ordering should not matter.
+\begin{verbatim}
+decinc :: Int -> [Int]
+decinc x = return (x-1) ++ return (x+1)
+\end{verbatim}
+
+\item \textbf{Append is not idempotent.} The following two programs have the same set of possible results; repetition should not matter.
+\begin{verbatim}
+prog1, prog2 :: [Int]
+prog1 = incdec 5 ++ incdec 3
+prog2 = return 6 ++ return 4 ++ return 2
+\end{verbatim}
+
+\item \textbf{Append favors its left argument.} In case the left argument is partial or infinite, the right argument is ignored. In the recursive function \texttt{f} below, the \texttt{(x-1)} branch is never reached. In fact, \texttt{f} and \texttt{g} are equivalent!
+\begin{verbatim}
+f, g :: Int -> [Int]
+f x = return x ++ f (x+1) ++ f (x-1)
+g x = return x ++ g (x+1)
+\end{verbatim}
+\end{itemize}
+
+The definition of powerdomain in the next section addresses all of these limitations of the list monad.
+
+%%% -------------------------------------------------------------------------
+\section{Axiomatization of Powerdomains}
+A \textbf{powerdomain} is a monad with a \textbf{nondeterministic choice} operator, which is \textbf{associative}, \textbf{commutative}, and \textbf{idempotent}.
+
+\subsection*{Powerdomain Operations}
+\begin{sectionbox}{}
+\begin{itemize}
+\item Singleton (i.e.~monadic unit/return) $\{-\}$
+\item Binary choice operator $-\uplus-$
+\item Monadic bind operator $- \gg\!\!= -$
+\end{itemize}
+\end{sectionbox}
+
+All operations must be \textbf{continuous}.
+
+%%% Start Column 2
+\columnbreak
+
+\subsection*{Powerdomain Laws}
+\begin{sectionbox}{}
+\begin{enumerate}
+\item Left unit: $\{x\} \gg\!\!= f = f(x)$
+\item Right unit: $xs \gg\!\!= (\lambda x.\ \{x\}) = xs$
+\item Bind-assoc: $(xs \gg\!\!= f) \gg\!\!= g = xs \gg\!\!= (\lambda x.\ f(x) \gg\!\!= g)$
+\item Bind-plus: $(xs \uplus ys) \gg\!\!= f = (xs \gg\!\!= f) \uplus (ys \gg\!\!= f)$
+\item Plus-assoc: $(xs \uplus ys) \uplus zs = xs \uplus (ys \uplus zs)$
+\item Plus-comm: $xs \uplus ys = ys \uplus xs$
+\item Plus-idem: $xs \uplus xs = xs$
+\end{enumerate}
+\end{sectionbox}
+
+Laws 1--3 are the standard \textbf{monad laws} from Haskell.
+
+The lazy list monad with append satisfies only Laws 1--5.
+
+%%% -------------------------------------------------------------------------
+%\section{Varieties of Powerdomains}
+
+\section{Convex Powerdomain}
+Given an element domain $D$, we can define the convex powerdomain $P^\natural(D)$ as a \textbf{free domain-algebra}:
+
+\begin{sectionbox}{}
+\begin{enumerate}
+\item Define a \textbf{recursive datatype}, with $\{-\}^\natural$ and $-\uplus^\natural-$ as \textbf{constructors}.
+\item \textbf{Quotient} this datatype modulo \textbf{associativity}, \textbf{commutativity}, and \textbf{idempotence} of $-\uplus^\natural-$ (Laws 5--7).
+\item Use Laws 1 and 4 as \textbf{defining equations} for bind.
+\item Prove Laws 2 and 3 by \textbf{induction} over $xs$.
+\end{enumerate}
+Thus $P^\natural(D)$ satisfies all seven powerdomain laws.
+\end{sectionbox}
+
+\begin{itemize}
+\item $P^\natural(D)$ is \textbf{universal} in a category-theoretical sense
+\item Unique powerdomain \textbf{homomorphism} from $P^\natural(D)$ to any other powerdomain of $D$
+\item $P^\natural(D)$ \textbf{distinguishes} as many values as possible
+\item $P^\natural(D)$ \textbf{identifies} computations whose sets of results have the same \textbf{convex-closure} (see Figure 1)
+\end{itemize}
+
+\section{Upper Powerdomain}
+
+We can define the upper powerdomain $P^\sharp(D)$ as a free domain-algebra satisfying an \textbf{additional law}:
+$$xs \uplus^\sharp ys \sqsubseteq xs$$
+
+\begin{itemize}
+\item $xs \uplus^\sharp ys$ is \textbf{greatest lower bound} of $xs$ and $ys$
+\item $xs \sqsubseteq ys$ if $ys$ has \textbf{fewer} possible outcomes than $xs$
+\item Binary choice is \textbf{strict}: $\bot\uplus^\sharp xs = \bot$
+\item \textbf{Demonic nondeterminism}: ``Possibly not terminating is just as bad as never terminating''
+\item Good for reasoning about \textbf{total correctness}
+\item $P^\sharp(D)$ \textbf{identifies} computations whose sets of results have the same \textbf{upward-closure}
+\end{itemize}
+
+\section{Lower Powerdomain}
+
+We can define the lower powerdomain $P^\flat(D)$ as a free domain-algebra satisfying an \textbf{additional law}:
+$$xs \sqsubseteq xs \uplus^\flat ys$$
+
+\begin{itemize}
+\item $xs \uplus^\flat ys$ is \textbf{least upper bound} of $xs$ and $ys$
+\item $xs \sqsubseteq ys$ if $ys$ has \textbf{more} possible outcomes than $xs$
+\item $\bot$ is \textbf{identity} for binary choice: $\bot\uplus^\flat xs = xs$
+\item \textbf{Angelic nondeterminism}: ``I don't care about execution paths that don't terminate''
+\item Good for reasoning about \textbf{partial correctness}
+\item $P^\flat(D)$ \textbf{identifies} computations whose sets of results have the same \textbf{downward-closure}
+\end{itemize}
+
+%%% Start Column 3
+\columnbreak
+
+%%% -------------------------------------------------------------------------
+\section{Visualizing Powerdomains}
+
+\begin{figure}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}|c|c|c|}
+\hline
+% upper powerdomain of 3-element lattice
+\begin{tikzpicture}[thick,scale=2.8]
+  \node (A) at (0,0)
+    {$\begin{array}{c}
+      \{0,1,2\}^\sharp \\
+      \{0,1\}^\sharp\ \{0,2\}^\sharp \\
+      \{0\}^\sharp
+      \end{array}$};
+  \node (B) at (0,2)
+    {$\begin{array}{c} \{1,2\}^\sharp \\ \{1\}^\sharp \end{array}$};
+  \node (C) at (0,4) {$\{2\}^\sharp$};
+  \draw (A) -- (B) -- (C);
+\end{tikzpicture}  
+&
+% lower powerdomain of 3-element lattice
+\begin{tikzpicture}[thick,scale=2.8]
+  \node (A) at (0,0) {$\{0\}^\flat$};
+  \node (B) at (0,2)
+    {$\begin{array}{c} \{1\}^\flat \\ \{0,1\}^\flat \end{array}$};
+  \node (C) at (0,4)
+    {$\begin{array}{c}
+      \{2\}^\flat \\
+      \{1,2\}^\flat\ \{0,2\}^\flat \\
+      \{0,1,2\}^\flat
+      \end{array}$};
+  \draw (A) -- (B) -- (C);
+\end{tikzpicture}  
+&
+% convex powerdomain of 3-element lattice
+\begin{tikzpicture}[thick,scale=2.8]
+  \node (A) at (0,0) {$\{0\}^\natural$};
+  \node (B) at (0,2) {$\{1\}^\natural$};
+  \node (C) at (0,4) {$\{2\}^\natural$};
+  \node (AB) at (1,1) {$\{0,1\}^\natural$};
+  \node (BC) at (1,3) {$\{1,2\}^\natural$};
+  \node (AC) at (2,2)
+    {$\begin{array}{c} \{0,2\}^\natural \\ \{0,1,2\}^\natural \end{array}$};
+  \draw (A) -- (B) -- (C);
+  \draw (A) -- (AB) -- (B) -- (BC) -- (C);
+  \draw (AB) -- (AC) -- (BC);
+\end{tikzpicture}
+\\
+\hline
+\end{tabular*}
+\caption{Upper, lower, and convex powerdomains of the three-element linearly ordered domain $0 \sqsubseteq 1 \sqsubseteq 2$}
+\end{figure}
+
+\begin{figure}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}|c|c|}
+\hline
+% upper powerdomain of lifted 2-element type
+\begin{tikzpicture}[thick,scale=3.9]
+  \node (U) at (0,0)
+    {$\begin{array}{c}\{\bot,A,B\}^\sharp\\
+      \{\bot,A\}^\sharp\ \{\bot,B\}^\sharp\\
+      \{\bot\}^\sharp\end{array}$};
+  \node (AB) at (0,1) {$\{A,B\}^\sharp$};
+  \node (A) at (-0.8,1.8) {$\{A\}^\sharp$};
+  \node (B) at (0.8,1.8) {$\{B\}^\sharp$};
+  \draw (U) -- (AB);
+  \draw (A) -- (AB) -- (B);
+\end{tikzpicture}  
+&
+% lower powerdomain of lifted 2-element type
+\begin{tikzpicture}[thick,scale=3.9]
+  \node (U) at (0,0) {$\{\bot\}^\flat$};
+  \node (UA) at (-1,1)
+    {$\begin{array}{c}\{A\}^\flat \\ \{\bot,A\}^\flat\end{array}$};
+  \node (UAB) at (0,2)
+    {$\begin{array}{c}\{A,B\}^\flat \\ \{\bot,A,B\}^\flat \end{array}$};
+  \node (UB) at (1,1)
+    {$\begin{array}{c}\{B\}^\flat \\ \{\bot,B\}^\flat\end{array}$};
+  \draw (U) -- (UA) -- (UAB);
+  \draw (U) -- (UB) -- (UAB);
+\end{tikzpicture}
+\\ \hline
+% convex powerdomain of lifted 2-element type
+\multicolumn{2}{|c|}{
+\begin{tikzpicture}[thick,xscale=4,yscale=3.5]
+  \node (U) at (0,0) {$\{\bot\}^\natural$};
+  \node (UA) at (-1,1) {$\{\bot,A\}^\natural$};
+  \node (UB) at (1,1) {$\{\bot,B\}^\natural$};
+  \node (UAB) at (0,2) {$\{\bot,A,B\}^\natural$};
+  \node (A) at (-1.3,1.7) {$\{A\}^\natural$};
+  \node (B) at (1.3,1.7) {$\{B\}^\natural$};
+  \node (AB) at (0,2.7) {$\{A,B\}^\natural$};
+  \draw (U) -- (UA) -- (A);
+  \draw (U) -- (UB) -- (B);
+  \draw (UA) -- (UAB);
+  \draw (UB) -- (UAB);
+  \draw (UAB) -- (AB);
+\end{tikzpicture}}
+\\ \hline
+\end{tabular*}
+\caption{Upper, lower, and convex powerdomains of the lifted two-element type
+% Lifted 2-element type
+\begin{tikzpicture}[thick,xscale=1.7,baseline=0.5]
+  \node (U) at (0,0) {$\bot$};
+  \node (A) at (-1,1) {$A$};
+  \node (B) at (1,1) {$B$};
+  \draw (A) -- (U) -- (B);
+\end{tikzpicture}}
+\end{figure}
+
+%%% -------------------------------------------------------------------------
+\section{Proof Automation}
+
+\subsection*{ACI Rewriting}
+Isabelle can use \textbf{permutative rewrite rules} to sort elements and remove duplicates in powerdomain expressions.
+\begin{displaymath}
+\begin{array}{rcl}
+(xs\uplus ys)\uplus zs & = & xs\uplus(ys\uplus zs) \\
+ys\uplus xs & = & xs\uplus ys \\
+ys\uplus(xs\uplus zs) & = & xs\uplus(ys\uplus zs) \\
+xs\uplus xs & = & xs \\
+xs\uplus(xs\uplus ys) & = & xs\uplus ys \\
+\end{array}
+\end{displaymath}
+
+\begin{itemize}
+\item ACI rules can solve goals like $\{z,y,x,x,y\}^\sharp = \{x,y,z\}^\sharp$
+\end{itemize}
+
+\subsection*{Solving Inequalities}
+Rewrite rules can reduce inequalities on \textbf{powerdomains} to inequalities on the \textbf{element type}.
+\begin{displaymath}
+\begin{array}{rcl}
+\{x\}^{\sharp}\sqsubseteq\{y\}^{\sharp} & \iff & x\sqsubseteq y \\
+xs\sqsubseteq(ys\uplus^{\sharp}zs) & \iff & (xs\sqsubseteq ys)\wedge(xs\sqsubseteq zs) \\
+(xs\uplus^{\sharp}ys)\sqsubseteq\{z\}^{\sharp} & \iff & (xs\sqsubseteq\{z\}^{\sharp})\vee(ys\sqsubseteq\{z\}^{\sharp})\\
+\\
+\{x\}^{\flat}\sqsubseteq\{y\}^{\flat} & \iff & x\sqsubseteq y \\
+(xs\uplus^{\flat}ys)\sqsubseteq zs & \iff & (xs\sqsubseteq zs)\wedge(ys\sqsubseteq zs) \\
+\{x\}^{\flat}\sqsubseteq(ys\uplus^{\flat}zs) & \iff & (\{x\}^{\flat}\sqsubseteq ys)\vee(\{x\}^{\flat}\sqsubseteq zs)\\
+\\
+\{x\}^{\natural}\sqsubseteq\{y\}^{\natural} & \iff & x\sqsubseteq y \\
+\{x\}^{\natural}\sqsubseteq(ys\uplus^{\natural}zs) & \iff & (\{x\}^{\natural}\sqsubseteq ys)\wedge(\{x\}^{\natural}\sqsubseteq zs) \\
+(xs\uplus^{\natural}ys)\sqsubseteq\{z\}^{\natural} & \iff & (xs\sqsubseteq\{z\}^{\natural})\wedge(ys\sqsubseteq\{z\}^{\natural})
+\end{array}
+\end{displaymath}
+
+\begin{itemize}
+\item The inequality rewrite rules can reduce subgoals like $\{x,y\}^\sharp\sqsubseteq\{y,z\}^\sharp$ to $x \sqsubseteq z \vee y \sqsubseteq z$
+\item With \textbf{antisymmetry}, these rules can solve equalities too
+\end{itemize}
+%%% Bibliography
+%\begin{thebibliography}{m}
+%\bibitem{areference}
+%An Author
+%{\em A reference}.
+%A paper.
+%\end{thebibliography}
+
+\end{multicols}
+
+%%% Table of figures
+
+% 3-element lattice
+%\begin{tikzpicture}[scale=2]
+%  \node (A) at (0,0) {$0$};
+%  \node (B) at (0,1) {$1$};
+%  \node (C) at (0,2) {$2$};
+%  \draw (A) -- (B) -- (C);
+%\end{tikzpicture}  
+
+\end{document}
+
