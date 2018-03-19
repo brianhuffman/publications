@@ -1,0 +1,187 @@
+<html>
+<title>Brian Huffman's Home Page</title>
+<body>
+
+<h2>Brian Huffman</h2>
+<!-- Who am I? -->
+<p>I am a recent PhD graduate from the
+<a HREF="http://www.cs.pdx.edu">Department of Computer Science</a> at <a href="http://cs.pdx.edu">Portland State University</a> (previously at the <a href="http://www.ogi.edu">OGI School of
+Science &amp; Engineering</a> at <a href="http://www.ohsu.edu">OHSU</a>).
+I work with the theorem prover
+<a href="http://isabelle.in.tum.de">Isabelle</a>.
+</p>
+
+<h3>Current Research Interests</h3>
+
+<h4>Domain Theory</h4>
+<p>I am currently the maintainer of HOLCF, a library of domain theory for the Isabelle theorem prover.</p>
+
+<p>
+My thesis project involves the development of tools for defining
+recursive functions and recursive datatypes in HOLCF.  Read more about
+it in my <a href="phdthesis.html">PhD thesis</a>.
+</p>
+
+<!-- Links -->
+<h2>My Stuff</h2>
+<h3>Isabelle Theories</h3>
+
+A few of my Isabelle theories are published online at the <a href="http://afp.sourceforge.net">Archive of Formal Proofs</a>.
+
+<dl>
+  <dt>
+    <a href="http://afp.sourceforge.net/entries/Tycon.shtml">
+      Type Constructor Classes and Monad Transformers
+    </a>
+  </dt>
+  <dd>
+    June 2012. These theories contain a formalization of first class type constructors and axiomatic constructor classes for HOLCF. This work is described in detail in the ICFP 2012 paper Formal Verification of Monad Transformers by the author. The formalization is a revised and updated version of earlier joint work with Matthews and White. Based on the hierarchy of type classes in Haskell, we define classes for functors, monads, monad-plus, etc. Each one includes all the standard laws as axioms. We also provide a new user command, tycondef, for defining new type constructors in HOLCF. Using tycondef, we instantiate the type class hierarchy with various monads and monad transformers. 
+  </dd>
+  <dt>
+    <a href="http://afp.sourceforge.net/entries/Free-Boolean-Algebra.shtml">
+      Free Boolean Algebra
+    </a>
+  </dt>
+  <dd>
+    March 2010. This theory defines a type constructor representing the free boolean algebra over a set of generators. Values of type (&alpha;)<i>formula</i> represent propositional formulas with uninterpreted variables from type &alpha;, ordered by implication. In addition to all the standard boolean algebra operations, the library also provides a function for building homomorphisms to any other boolean algebra type.
+  </dd>
+
+  <dt>
+    <a href="http://afp.sourceforge.net/entries/Stream-Fusion.shtml">
+      Stream Fusion
+    </a>
+  </dt>
+  <dd>
+    April 2009. Stream Fusion is a system for removing intermediate list structures from Haskell programs; it consists of a Haskell library along with several compiler rewrite rules. (The library is available <a href="http://www.cse.unsw.edu.au/~dons/streams.html">online</a>.) These theories contain a formalization of much of the Stream Fusion library in HOLCF. Lazy list and stream types are defined, along with coercions between the two types, as well as an equivalence relation for streams that generate the same list. List and stream versions of map, filter, foldr, enumFromTo, append, zipWith, and concatMap are defined, and the stream versions are shown to respect stream equivalence.
+  </dd>
+
+  <dt>
+    <a href="http://afp.sourceforge.net/entries/Ordinal.shtml">
+      Countable Ordinals
+    </a>
+  </dt>
+  <dd>
+    November 2005. This development defines a well-ordered type of countable ordinals. It includes notions of continuous and normal functions, recursively defined functions over ordinals, least fixed-points, and derivatives. Much of ordinal arithmetic is formalized, including exponentials and logarithms. The development concludes with formalizations of Cantor Normal Form and Veblen hierarchies over normal functions. 
+  </dd>
+</dl>
+
+<h3>Papers</h3>
+<dl>
+ <dt><a href="icfp2012.html">Formal Verification of Monad Transformers</a></dt>
+ <dd>International Conference on Functional Programming (ICFP'12), Copenhagen, Denmark, September, 2012. Publication pending.
+ </dd>
+ <br>
+  <dt><a href="phdthesis.html">HOLCF '11: A Definitional Domain Theory for Verifying Functional Programs</a></dt>
+  <dd>PhD thesis, Portland State University, 2012. (<a href="papers/phdthesis.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Proof Pearl: A New Foundation for Nominal Isabelle</dt>
+ <dd>Brian Huffman and Christian Urban. In Matt Kaufmann and Lawrence C. Paulson, editors, Interactive Theorem Proving - 1st International Conference (LNCS 6172), pages 35-50, Springer, 2010.
+     (<a href="papers/itp2010.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>A Purely Definitional Universal Domain</dt>
+ <dd>22nd International Conference on Theorem Proving in Higher Order Logics,
+     Munich, Germany, August, 2009.
+     (<a href="papers/tphols2009.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Reasoning with Powerdomains in Isabelle/HOLCF</dt>
+ <dd>21st International Conference on Theorem Proving in Higher Order Logics
+     (Emerging Trends), Montreal, Quebec, Canada, August, 2008.
+     (<a href="papers/tphols2008.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Transfer Principle Proof Tactic for Nonstandard Analysis
+ <dd>NETCA 2005, August 2005.
+     (<a href="papers/netca2005.pdf">pdf</a>)
+     (<a href="talks/NETCA-slides.pdf">slides</a>)
+ </dd>
+ <br>
+ <dt>Axiomatic Constructor Classes in Isabelle/HOLCF</dt>
+ <dd>Brian Huffman, John Matthews and Peter White. In Joe Hurd, Edward Smith, and Ashish Darbari, editors, Theorem Proving in Higher Order Logics - 18th International Conference, TPHOLs 2005, Oxford, UK, August 2005, Proceedings, pages 147-162, Oxford, UK, August 2005.
+     (<a href="papers/tphols2005.pdf">pdf</a>)
+     (<a href="talks/TPHOLs2005-slides.pdf">slides</a>)
+ </dd>
+ <br>
+ <dt>Semantics for ML Polymorphism in Isabelle/HOL</dt>
+ <dd>Research Proficiency Exam (RPE),
+     OGI School of Science and Engineering at OHSU, May 2004.
+     (<a href="papers/rpe.pdf">pdf</a>)
+     (<a href="talks/rpe-slides.pdf">slides</a>)
+ </dd>
+</dl>
+
+<h3>Talks</h3>
+<dl>
+ <dt>HOLCF '11: A Definitional Domain Theory for Verifying Functional Programs</dt>
+ <dd>PhD Thesis Defense, Portland State University, July 13, 2011.
+     (<a href="talks/110713-defense.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Verifying Stream Fusion with Isabelle/HOLCF</dt>
+ <dd>Galois Technical Seminar, June 30, 2009.
+     (<a href="talks/talk20090630.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Deflation Chains and Induction Rules for Haskell Types</dt>
+ <dd>Presented at Portland State University, November 7, 2008.
+     (<a href="talks/talk20081107.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>A Deflation Model for Haskell Types</dt>
+ <dd>Presented at Portland State University, October 10, 2008.
+     (<a href="talks/talk20081010.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Powerdomains in Isabelle/HOLCF</dt>
+ <dd>Galois Technical Seminar, February 26, 2008.
+     (<a href="talks/talk20080226.pdf">pdf</a>)
+ <br>Earlier version presented at PSU, February 8, 2008.
+     (<a href="talks/talk20080208.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>A Framework for Embedding Functional languages in Isabelle</dt>
+ <dd>Presented at Portland State University, August 9, 2007.
+     (<a href="talks/talk20070809.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Embedding GHC-Core in Isabelle</dt>
+ <dd>Presented at Galois, March 6, 2007.
+     (<a href="talks/talk20070306.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Semantics for ML Polymorphism in Isabelle/HOL</dt>
+ <dd>Research Proficiency Exam (RPE),
+     Portland State University, October 12, 2006.
+     (<a href="talks/talk20061012.pdf">pdf</a>)
+ </dd>
+ <br>
+ <dt>Bringing Isabelle/HOLCF Closer to Haskell</dt>
+ <dd>Pattern matching combinators for Isabelle/HOLCF. Presented at Portland State University, November 16, 2005.
+     (<a href="talks/talk20051116.pdf">pdf</a>)
+ <br>Earlier version, presented October 28, 2005.
+     (<a href="talks/talk20051028.pdf">pdf</a>)
+ </dd>
+</dl>
+
+<p><font size="-1">
+<!-- April 6, 2005: first version -->
+<!-- February 7, 2006: added papers, talks, more theories -->
+<!-- May 31, 2006: added tphols paper -->
+<!-- Dec 5, 2006: added Bits library -->
+<!-- Apr 2, 2007: moved to PSU -->
+<!-- July 12, 2007: added current research interests section -->
+<!-- July 25, 2007: added link to thesis proposal draft -->
+<!-- August 17, 2007: updated proposal draft -->
+<!-- December 17, 2007: updated proposal draft -->
+<!-- March 8, 2008: added more talks -->
+<!-- August 28, 2008: add TPHOLs 2008 paper, VectorCalculus theories -->
+<!-- October 16, 2008: add new talk, separate papers/talks -->
+<!-- March 16, 2009: add universal domain draft paper -->
+<!-- January 15, 2010: note that TPHOLs 2009 paper was published -->
+<!-- March 12, 2010: add thesis proposal -->
+Last Updated: July 9, 2012
+</font></p>
+</body>
+</html>

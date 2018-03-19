@@ -1,0 +1,35 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+<title>Formal Verification of Monad Transformers</title>
+</head>
+<body>
+<h4>Formal Verification of Monad Transformers</h4>
+<h4>Brian Huffman</h4>
+
+<p>We present techniques for reasoning about constructor classes that (like the monad class) fix polymorphic operations and assert polymorphic axioms. We do not require a logic with first-class type constructors, first-class polymorphism, or type quantification; instead, we rely on a domain-theoretic model of the type system in a universal domain to provide these features.</p>
+
+<p>These ideas are implemented in the Tycon library for the Isabelle theorem prover, which builds on the HOLCF library of domain theory. The Tycon library provides various axiomatic type constructor classes, including functors and monads. It also provides automation for instantiating those classes, and for defining further subclasses.</p>
+
+<p>We use the Tycon library to formalize three Haskell monad transformers: the error transformer, the writer transformer, and the resumption transformer. The error and writer transformers do not universally preserve the monad laws; however, we establish datatype invariants for each, showing that they are valid monads when viewed as abstract datatypes.</p>
+
+<p xmlns:dct="http://purl.org/dc/terms/" xmlns:vcard="http://www.w3.org/2001/vcard-rdf/3.0#">
+  <a rel="license"
+     href="http://creativecommons.org/publicdomain/zero/1.0/">
+    <img src="http://i.creativecommons.org/p/zero/1.0/88x31.png" style="border-style: none;" alt="CC0" />
+  </a>
+  <br />
+  To the extent possible under law,
+  <a rel="dct:publisher"
+     href="http://web.cecs.pdx.edu/~brianh/">
+    <span property="dct:title">Brian Huffman</span></a>
+  has waived all copyright and related or neighboring rights to
+  <span property="dct:title">Formal Verification of Monad Transformers</span>.
+This work is published from:
+<span property="vcard:Country" datatype="dct:ISO3166"
+      content="DE" about="http://web.cecs.pdx.edu/~brianh/">
+  Germany</span>.
+</p>
+
+<p><a href="papers/icfp2012.pdf">pdf</a></p>
+
+</body></html>
