@@ -20,6 +20,14 @@
   Brian Huffman. _22nd International Conference on Theorem Proving in
   Higher Order Logics, Munich, Germany, August, 2009._
 
+* __[Reasoning with Powerdomains in Isabelle/HOLCF][powerdomain].__
+
+  Brian Huffman. _21st International Conference on Theorem Proving in
+  Higher Order Logics (Emerging Trends), Montreal, Quebec, Canada,
+  August, 2008._
+
+  [powerdomain]: papers/tphols2008.pdf
+
 * __[Axiomatic Constructor Classes in
   Isabelle/HOLCF](papers/tphols2005.pdf).__
 
