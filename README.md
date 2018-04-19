@@ -2,6 +2,13 @@
 
 ## Conferences
 
+* __[Lifting and Transfer: A Modular Design for Quotients in
+  Isabelle/HOL](papers/cpp2013.pdf).__
+
+  Brian Huffman and Ondřej Kunčar. _International Conference on
+  Certified Programs and Proofs (CPP'13), Melbourne, Australia,
+  December, 2013._
+
 * __[Formal Verification of Monad Transformers](icfp2012.html).__
 
   Brian Huffman. _International Conference on Functional Programming
