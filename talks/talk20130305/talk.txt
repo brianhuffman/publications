@@ -1,0 +1,243 @@
+------------------------------------------------------------
+Parametricity, Quotient types, and Theorem transfer
+
+Brian Huffman
+(based on work with Ondrej Kuncar, T.U. Munich)
+
+------------------------------------------------------------
+Abstract:
+
+A polymorphic function may be instantiated at many different types; if
+the function is parametrically polymorphic, then all of its instances
+must behave uniformly. Reynolds' parametricity theorem expresses this
+precisely, in terms of binary relations derived from types. One
+application of the parametricity theorem is to derive Wadler-style
+"free theorems" about a polymorphic function from its type; e.g. rev
+:: [a] -> [a] must satisfy map f (rev xs) = rev (map f xs).
+
+In this talk, I will show how to apply many of the ideas behind
+parametricity and free theorems in a new setting: formal reasoning
+about quotient types. Using types-as-binary-relations, we can
+automatically prove that corresponding propositions about quotient
+types and their representation types are logically equivalent. This
+design is implemented as the Transfer package in the Isabelle theorem
+prover, where it is used to automate many definitions and proofs about
+quotient types.
+
+Bio:
+
+Brian Huffman is a recent PhD graduate from the Department of Computer
+Science at Portland State University, now at Galois after completing a
+postdoc at the Technical University of Munich. He has been an avid
+Haskell programmer since 2001, and has contributed to the development
+of the Isabelle interactive theorem prover since 2005, with an
+emphasis on tools for verifying lazy functional programs. Several of
+Brian's formalizations can be found online at the Archive of Formal
+Proofs (http://afp.sourceforge.net).
+
+
+------------------------------------------------------------
+
+Outline
+
+I. Parametricity
+II. Quotient types
+III. Theorem transfer
+
+------------------------------------------------------------
+------------------------------------------------------------
+Parametricity
+
+Parametrically polymorphic functions
+- may be instantiated at different types
+- all instances behave uniformly
+
+How to make this precise?
+
+------------------------------------------------------------
+
+Main idea: types as relations
+
+* [| type expression |] : relation
+
+* Ground types (Int, Bool, Char) as identity relations
+  [|Int|] = Id_Int
+  [|Bool|] = Id_Bool
+
+* Type constructors as *relators* (parameterized by relation on elements)
+
+-- Two data structures are related if:
+--   they have the same shape
+--   elements are related pointwise
+
+ R x x' /\ S y y'
+-------------------
+(R*S) (x,y) (x',y')
+
+        R x x'                     S y y'
+------------------------  --------------------------
+(R+S) (Left x) (Left x')  (R+S) (Right y) (Right y')
+
+
+List relator gives least relation satisfying these:
+
+----------
+L(R) [] []
+
+R x x' /\ L(R) xs xs'
+---------------------
+L(R) (x:xs) (x':xs')
+
+------------------------------------------------------------
+Functions are related if they take related input to related output
+
+Function relator defined as follows
+(A |=> B) f g <===> (forall x y, A x y ==> B (f x) (g y))
+
+In other words, the following rules hold:
+(A |=> B) f g  /\  A x y
+------------------------(app)
+     B (f x) (g y)
+
+
+      Gamma, A x y |- B u[x] v[y]
+--------------------------------------(abs)
+Gamma |- (A |=> B) (\x -> u[x]) (\y -> v[y])
+
+
+
+Compare to lambda calculus typing rules:
+
+Gamma |- f : A -> B  /\  Gamma |- x : A
+---------------------------------------(app)
+           Gamma |- f x : B
+
+Gamma, x : A |- t |- t[x] : B
+------------------------------(abs)
+Gamma |- (\x -> t[x]) : A -> B
+
+------------------------------------------------------------
+
+Relators for datatypes include precisely what is necessary to make
+constructors parametric:
+
+L(A) [] []
+(A |=> L(A) |=> L(A)) (:) (:)
+(A |=> B |=> A*B) (,) (,)
+(A |=> A+B) Left Left
+(B |=> A+B) Right Right
+
+
+((A |=> Id_Bool) |=> L(A) |=> L(A)) filter filter
+
+------------------------------------------------------------
+Theorems for free!
+
+reverse :: [a] -> [a]
+
+(L(A) |=> L(A)) reverse reverse
+
+Typical free theorems come from instantiating relations
+with graphs of functions.
+
+Let A = graph of function f, i.e. A x y <===> f x = y.
+
+Then L(A) = graph of function (map f). (Why?)
+
+(L(A) |=> L(A)) reverse reverse
+
+L(A) xs ys ==> L(A) (reverse xs) (reverse ys)
+
+map f xs = ys ==> map f (reverse xs) = reverse ys
+
+map f (reverse xs) = reverse (map f xs)
+
+------------------------------------------------------------
+Theorems for free!
+
+filter :: (a -> Bool) -> [a] -> [a]
+
+((A |=> Id_Bool) |=> L(A) |=> L(A)) filter filter
+
+Typical free theorems come from instantiating relations
+with graphs of functions.
+
+Let A = graph of function f, i.e. A x y <===> f x = y.
+
+Then L(A) = graph of function (map f). (Why?)
+
+((A |=> Id_Bool) |=> L(A) |=> L(A)) filter filter
+
+
+(ALL x y, A x y ==> p x = q y)  /\  L(A) xs ys
+----------------------------------------------
+      L(A) (filter p xs) (filter q ys)
+
+(ALL x y, f x = y ==> p x = q y)  /\  map f xs = ys
+---------------------------------------------------
+        map f (filter p xs) = filter q ys
+
+         (ALL x, p x = q (f x))
+-----------------------------------------
+map f (filter p xs) = filter q (map f xs)
+
+map f (filter (q . f) xs) = filter q (map f xs)
+
+------------------------------------------------------------
+In Higher Order Logic, not all polymorphic functions are parametric
+
+Consider equality (=) :: a -> a -> Bool.
+
+A parametrically polymorphic function of this type would satisfy
+
+(A |=> A |=> Id_Bool) (=) (=)
+
+(forall x x' y y', A x x' --> A y y' --> (x = y) <--> (x' = y'))
+
+i.e.
+
+A x y ==> A x y' ==> y = y'
+and
+A x y ==> A x' y ==> x = x'
+
+This does not hold for all relations A!
+...but it does for some.
+
+bi_unique A ==> (A |=> A |=> Id) (=) (=)
+
+Think of "bi_unique A" as a class constraint like Haskell "Eq a"
+
+------------------------------------------------------------
+In Higher Order Logic, not all polymorphic functions are parametric
+
+Consider universal quantifier forall :: (a -> Bool) -> Bool.
+
+A parametrically polymorphic function of this type would satisfy
+
+((A |=> Id_Bool) |=> Id_Bool) forall forall
+
+This is equivalent to
+
+forall x, exists y such that A x y
+AND
+forall y, exists x such that A x y
+
+we say "bi_total A"
+
+bi_total A ==> ((A |=> Id_Bool) |=> Id_Bool) forall forall
+
+------------------------------------------------------------
+Free theorems are nice...
+
+How else can we use parametricity?
+
+------------------------------------------------------------
+------------------------------------------------------------
+Quotient types and subtypes
+
+((A |=> Id_Bool) |=> L(A) |=> L(A)) filter filter
+
+
+((A |=> B) |=> L(A) |=> L(B)) map map
+
+
