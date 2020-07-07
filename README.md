@@ -9,6 +9,13 @@
   Certified Programs and Proofs (CPP'13), Melbourne, Australia,
   December, 2013._
 
+* __[Type Classes and Filters for Mathematical Analysis in
+  Isabelle/HOL](papers/itp2013.pdf).__
+
+  Johannes Hölzl, Fabian Immler, and Brian Huffman. _Interactive
+  Theorem Proving - 4th International Conference (LNCS 7998), pages
+  279-294, Springer, 2013._
+
 * __[Formal Verification of Monad Transformers](icfp2012.html).__
 
   Brian Huffman. _International Conference on Functional Programming
