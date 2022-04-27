@@ -1,0 +1,143 @@
+--------------------------------------------------------------------------------
+
+Verified Cryptographic Code for Everybody
+
+Brett Boston, Samuel Breese, Joey Dodds, Mike Dodds, Brian Huffman, Adam Petcher, Andrei Stefanescu
+
+International Conference on Computer Aided Verification
+CAV 2021: Computer Aided Verification pp 645-668| Cite as
+
+Boston B. et al. (2021) Verified Cryptographic Code for Everybody.
+In: Silva A., Leino K.R.M. (eds) Computer Aided Verification. CAV 2021. Lecture Notes in Computer Science, vol 12759.
+Springer, Cham. https://doi.org/10.1007/978-3-030-81685-8_31
+
+We have completed machine-assisted proofs of two highly-optimized
+cryptographic primitives, AES-256-GCM and SHA-384. We have verified
+that the implementations of these primitives, written in a mix of C
+and x86 assembly, are memory safe and functionally correct, by which
+we mean input-output equivalent to their algorithmic specifications.
+Our proofs were completed using SAW, a bounded cryptographic
+verification tool which we have extended to handle embedded x86. The
+code we have verified comes from AWS LibCrypto. This code is identical
+to BoringSSL and very similar to OpenSSL, from which it ultimately
+derives. We believe we are the first to formally verify these
+implementations, which protect the security of nearly everybody on the
+internet.
+
+--------------------------------------------------------------------------------
+
+Formal Verification of Flow Equivalence in Desynchronized Designs
+Jennifer Paykin, Brian Huffman, Daniel M. Zimmerman, and Peter A. Beerel
+International Symposium on Asynchronous Circuits and Systems (ASYNC), May 2020
+
+--------------------------------------------------------------------------------
+https://link.springer.com/chapter/10.1007/978-3-319-96142-2_26
+
+Continuous Formal Verification of Amazon s2n
+
+CAV 2018: Computer Aided Verification pp 430-446
+
+Chudnov A. et al. (2018) Continuous Formal Verification of Amazon s2n.
+In: Chockler H., Weissenbacher G. (eds) Computer Aided Verification.
+CAV 2018. Lecture Notes in Computer Science, vol 10982. Springer,
+Cham. https://doi.org/10.1007/978-3-319-96142-2_26
+
+
+Andrey Chudnov, Nathan Collins, Byron Cook, Joey Dodds, Brian Huffman,
+Colm MacCárthaigh, Stephen Magill, Eric Mertens, Eric Mullen, Serdar
+Tasiran, Aaron Tomb, Eddy Westbrook
+
+Open AccessConference paper
+First Online: 18 July 2018
+
+Part of the Lecture Notes in Computer Science book series (LNCS, volume 10982)
+
+Abstract
+
+We describe formal verification of s2n, the open source TLS
+implementation used in numerous Amazon services. A key aspect of this
+proof infrastructure is continuous checking, to ensure that properties
+remain proven during the lifetime of the software. At each change to
+the code, proofs are automatically re-established with little to no
+interaction from the developers. We describe the proof itself and the
+technical decisions that enabled integration into development.
+
+--------------------------------------------------------------------------------
+
+Constructing Semantic Models of Programs with the Software Analysis Workbench
+
+Robert Dockins, Adam Foltzer, Joe Hendrix, Brian Huffman, Dylan McNamee, Aaron Tomb
+
+Working Conference on Verified Software: Theories, Tools, and Experiments (VSTTE)
+
+2016/7/17
+
+--------------------------------------------------------------------------------
+
+https://dl.acm.org/doi/10.1145/2527269.2527277
+
+SAW: the Software Analysis Workbench
+
+Authors: Kyle Carter, Adam Foltzer, Joe Hendrix, Brian Huffman, Aaron Tomb
+
+HILT '13: Proceedings of the 2013 ACM SIGAda annual conference on High integrity language technology
+November 2013 Pages 15–18https://doi.org/10.1145/2527269.2527277
+Published:10 November 2013
+
+Abstract: "Galois has developed a suite of symbolic simulation and
+formal analysis tools, collectively called the Software Analysis
+Workbench (SAW). SAW provides security analysts and engineers with the
+ability to generate formal models from C and Java programs and prove
+properties of those programs using several automated verification
+tools. SAW is primarily used to verify the correctness of
+cryptographic implementations, and is able to import specifications
+written in Cryptol, a language developed by Galois for specifying
+cryptographic primitives. In this short paper, we describe the main
+components of SAW. We then given an overview of the cryptographic
+implementations that have been verified."
+
+--------------------------------------------------------------------------------
+
+Type classes and filters for mathematical analysis in Isabelle/HOL
+
+Johannes Hölzl, Fabian Immler, Brian Huffman
+
+July 2013
+ITP'13: Proceedings of the 4th international conference on
+Interactive Theorem
+Proving
+https://doi.org/10.1007/978-3-642-39634-2_21
+
+--------------------------------------------------------------------------------
+
+Ordinals in HOL: transfinite arithmetic up to (and beyond) ω1
+
+Michael Norrish, Brian Huffman
+July 2013
+ITP'13: Proceedings of the 4th international conference on Interactive Theorem Proving
+https://doi.org/10.1007/978-3-642-39634-2_12
+
+--------------------------------------------------------------------------------
+
+Lifting and Transfer: A Modular Design for Quotients in Isabelle/HOL
+Proceedings of the Third International Conference on Certified Programs and Proofs - Volume 8307
+December 2013, pp 131-146• https://doi.org/10.1007/978-3-319-03545-1_9
+
+Brian Huffman, Ondřej Kunčar
+
+--------------------------------------------------------------------------------
+
+https://ndmitchell.com/#hlint_27_jun_2013
+
+Certified HLints with Isabelle/HOLCF-Prelude
+HART 2013, with Joachim Breitner, Brian Huffman and Christian Sternagel, 27 Jun 2013.
+
+@inproceedings{mitchell:hlint_27_jun_2013
+    ,title          = {Certified {HLints} with Isabelle/HOLCF-Prelude}
+    ,author         = {Joachim Breitner and Brian Huffman and Neil Mitchell and Christian Sternagel}
+    ,year           = {2013}
+    ,month          = {June}
+    ,day            = {27}
+    ,booktitle      = {Haskell And Rewriting Techniques (HART)}
+    ,url            = {https://ndmitchell.com/downloads/paper-certified_hlints_with_isabelle_holcf_prelude-27_jun_2013.pdf}
+}
